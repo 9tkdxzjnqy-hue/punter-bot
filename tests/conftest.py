@@ -1,0 +1,29 @@
+"""
+Shared test fixtures for service tests.
+
+Sets up a temporary SQLite database with the schema and seeded players
+before each test, and cleans up afterward.
+"""
+
+import os
+import tempfile
+
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def test_db(monkeypatch):
+    """Create a fresh temporary database for each test."""
+    fd, db_path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+
+    monkeypatch.setattr("src.config.Config.DB_PATH", db_path)
+    monkeypatch.setattr("src.config.Config.TIMEZONE", "Europe/Dublin")
+    monkeypatch.setattr("src.config.Config.TEST_MODE", True)
+
+    from src.db import init_db
+    init_db()
+
+    yield db_path
+
+    os.unlink(db_path)

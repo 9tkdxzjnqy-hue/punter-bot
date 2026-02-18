@@ -1,5 +1,5 @@
 from src.db import get_db
-from src.services.player_service import get_all_players, get_player_by_id
+from src.services.player_service import get_all_players, get_player_by_id, get_rotation_order
 
 
 def get_next_placer():
@@ -30,7 +30,7 @@ def get_next_placer():
 
     conn.close()
 
-    players = get_all_players()  # ordered by rotation_position
+    players = get_rotation_order()  # uses ROTATION_ORDER config or rotation_position
 
     if not last_week or not last_week["placer_id"]:
         # No previous placer — start with first in rotation
@@ -125,7 +125,7 @@ def get_rotation_display():
 
 def _build_queue(next_placer):
     """Build the full rotation queue starting from the next placer."""
-    players = get_all_players()
+    players = get_rotation_order()
     conn = get_db()
 
     # Get unprocessed penalty queue entries

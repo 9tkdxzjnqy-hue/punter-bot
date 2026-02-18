@@ -1,20 +1,61 @@
 require("dotenv").config({ path: require("path").resolve(__dirname, "../.env") });
+const path = require("path");
+const { execSync } = require("child_process");
 const { Client, LocalAuth } = require("whatsapp-web.js");
 const qrcode = require("qrcode-terminal");
 const express = require("express");
 const http = require("http");
 
+// Kill any orphaned Chrome using our session dir (fixes "browser already running" after crash/kill)
+function killStaleChrome() {
+  const sessionPath = path.join(__dirname, ".wwebjs_auth", "session");
+  try {
+    execSync(`pkill -9 -f "${sessionPath}"`, { stdio: "ignore" });
+    console.log("Cleaned up stale Chrome process.");
+    execSync("sleep 2", { stdio: "ignore" }); // Let OS release session lock
+  } catch {
+    // No process found — fine
+  }
+}
+
 // Config
 const FLASK_URL = process.env.FLASK_URL || "http://127.0.0.1:5001";
 const BRIDGE_PORT = parseInt(process.env.BRIDGE_PORT || "3000", 10);
 const GROUP_CHAT_ID = process.env.GROUP_CHAT_ID || "";
+// Comma-separated list; if set, bot responds in all these groups (overrides single GROUP_CHAT_ID)
+const _groupIdsRaw = process.env.GROUP_CHAT_IDS || "";
+const GROUP_CHAT_IDS = _groupIdsRaw ? _groupIdsRaw.split(",").map((g) => g.trim()).filter(Boolean) : [];
+
+// Use system Chrome if Puppeteer's bundled Chrome isn't found (e.g. in sandbox)
+const chromePaths = [
+  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  "/Applications/Chromium.app/Contents/MacOS/Chromium",
+];
+const fs = require("fs");
+let executablePath = null;
+for (const p of chromePaths) {
+  try {
+    if (fs.existsSync(p)) {
+      executablePath = p;
+      break;
+    }
+  } catch {}
+}
 
 // WhatsApp client with persistent local auth
 const client = new Client({
   authStrategy: new LocalAuth(),
   puppeteer: {
     headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    ...(executablePath && { executablePath }),
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage", // Avoid /dev/shm issues in limited environments
+      "--disable-gpu",
+      "--disable-software-rasterizer",
+      "--disable-features=site-per-process", // Reduces detached Frame errors
+    ],
   },
 });
 
@@ -33,18 +74,59 @@ client.on("authenticated", () => {
   console.log("Authenticated successfully.");
 });
 
+// Intro message when bot is added to a group
+const INTRO_MESSAGE = [
+  "Good afternoon, gentlemen. I am The Betting Butler, at your service.",
+  "",
+  "I shall assist with the weekly accumulator: collecting picks, recording results, managing the rotation, and tracking penalties. Use !help for a list of commands.",
+  "",
+  "Please note — I have no data yet. Once the first week's picks and results are in, my full capabilities will be available. Until then, some commands may report that nothing is recorded.",
+].join("\n");
+
+client.on("group_join", async (notification) => {
+  const botId = client.info?.wid?._serialized;
+  if (!botId || !notification.recipientIds?.includes(botId)) return; // Bot wasn't added
+  try {
+    await notification.reply(INTRO_MESSAGE);
+    console.log(`Intro sent to group: ${notification.chatId || "unknown"}`);
+  } catch (err) {
+    console.error("Failed to send intro:", err.message);
+  }
+});
+
 client.on("auth_failure", (msg) => {
   console.error("Authentication failed:", msg);
 });
+
+let isReconnecting = false;
 
 client.on("disconnected", (reason) => {
   console.log("Client disconnected:", reason);
   // Attempt reconnect after 10 seconds
   setTimeout(() => {
-    console.log("Attempting reconnection...");
-    client.initialize();
+    if (!isReconnecting) {
+      console.log("Attempting reconnection...");
+      client.initialize();
+    }
   }, 10000);
 });
+
+async function reconnectClient() {
+  if (isReconnecting) return;
+  isReconnecting = true;
+  console.log("Session stale (detached Frame). Reconnecting WhatsApp client...");
+  try {
+    await client.destroy();
+    await new Promise((r) => setTimeout(r, 2000)); // Brief pause before reinit
+    await client.initialize();
+    console.log("Reconnection complete.");
+  } catch (err) {
+    console.error("Reconnection failed:", err.message);
+    console.error("Restart the bridge manually: cd bridge && npm start");
+  } finally {
+    isReconnecting = false;
+  }
+}
 
 // Helper to POST JSON to Flask using Node built-in http
 function postToFlask(path, data) {
@@ -113,8 +195,16 @@ client.on("message_create", async (message) => {
 
     const groupId = chat.id._serialized;
 
-    // Only process messages from our target group
-    if (groupId !== GROUP_CHAT_ID) return;
+    // Only process messages from our target group(s)
+    const allowedGroups = GROUP_CHAT_IDS.length ? GROUP_CHAT_IDS : (GROUP_CHAT_ID ? [GROUP_CHAT_ID] : []);
+    if (allowedGroups.length && !allowedGroups.includes(groupId)) {
+      console.log(`[IGNORED] Wrong group. Expected one of: ${allowedGroups.join(", ")}. Got: ${groupId}`);
+      return;
+    }
+    // Discovery mode: when no group configured, accept any group and log the ID
+    if (!allowedGroups.length) {
+      console.log(`>>> GROUP ID FOR .env: GROUP_CHAT_ID=${groupId}`);
+    }
 
     let sender = "Unknown";
     let senderPhone = "";
@@ -143,6 +233,10 @@ client.on("message_create", async (message) => {
     const result = await postToFlask("/webhook", payload);
     if (result && result.action === "replied") {
       console.log(`Bot replied: ${result.reply.slice(0, 80)}`);
+    } else if (result) {
+      console.log(`Flask response: ${result.action || "unknown"}${result.reason ? ` (${result.reason})` : ""}`);
+    } else {
+      console.error("Flask request failed or returned no data — check Flask is running on", process.env.FLASK_URL || "http://127.0.0.1:5001");
     }
   } catch (err) {
     console.error("Error processing message:", err.message);
@@ -167,6 +261,16 @@ app.post("/send", async (req, res) => {
     res.json({ status: "sent" });
   } catch (err) {
     console.error("Failed to send message:", err.message);
+    if (err.message && err.message.includes("detached Frame")) {
+      console.error("→ WhatsApp session is stale. Attempting auto-reconnect...");
+      res.status(503).json({
+        error: err.message,
+        retry: true,
+        hint: "Bridge is reconnecting. Flask may retry in a few seconds.",
+      });
+      reconnectClient(); // Fire-and-forget; don't block response
+      return;
+    }
     res.status(500).json({ error: err.message });
   }
 });
@@ -204,4 +308,5 @@ app.listen(BRIDGE_PORT, () => {
 });
 
 console.log("Initializing WhatsApp client...");
+killStaleChrome();
 client.initialize();

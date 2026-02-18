@@ -13,7 +13,7 @@ class TestSubmitPick:
         players = get_all_players()
         player = players[0]
 
-        pick, is_update = submit_pick(
+        pick, is_update, changed, _ = submit_pick(
             player_id=player["id"],
             week_id=week["id"],
             description="Man Utd to win",
@@ -26,6 +26,7 @@ class TestSubmitPick:
         assert pick["description"] == "Man Utd to win"
         assert pick["odds_original"] == "2/1"
         assert is_update is False
+        assert changed is True
 
     def test_submit_pick_update(self):
         week = get_or_create_current_week()
@@ -33,11 +34,24 @@ class TestSubmitPick:
         player = players[0]
 
         submit_pick(player["id"], week["id"], "Man Utd", 3.0, "2/1", "win")
-        pick, is_update = submit_pick(player["id"], week["id"], "Arsenal", 2.5, "6/4", "win")
+        pick, is_update, changed, _ = submit_pick(player["id"], week["id"], "Arsenal", 2.5, "6/4", "win")
 
         assert pick["description"] == "Arsenal"
         assert pick["odds_original"] == "6/4"
         assert is_update is True
+        assert changed is True
+
+    def test_submit_pick_unchanged_resubmission(self):
+        """Re-submitting same pick returns changed=False."""
+        week = get_or_create_current_week()
+        players = get_all_players()
+        player = players[0]
+
+        submit_pick(player["id"], week["id"], "Man Utd 2/1", 3.0, "2/1", "win")
+        pick, is_update, changed, _ = submit_pick(player["id"], week["id"], "Man Utd 2/1", 3.0, "2/1", "win")
+
+        assert is_update is True
+        assert changed is False
 
 
 class TestGetPicks:

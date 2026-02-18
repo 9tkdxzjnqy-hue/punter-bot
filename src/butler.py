@@ -37,13 +37,32 @@ def _formalize_pick(description):
     return text.strip()
 
 
-def pick_confirmed(player, description, odds, is_update=False):
+def _strip_odds_for_display(text):
+    """Remove odds from pick text so we don't repeat them when showing @ [odds]."""
+    if not text:
+        return text
+    # Strip fractional odds (6/10, 21/20), decimal (2.0, 3.75), evens
+    text = re.sub(r"\b\d+/\d+\b", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\b\d+\.\d{1,2}\b", "", text)
+    text = re.sub(r"\bevens?\b", "", text, flags=re.IGNORECASE)
+    return re.sub(r"\s+", " ", text).strip().rstrip(".,")
+
+
+def pick_confirmed(player, description, odds, is_update=False, placer=None, previous_description=None):
     """Confirm a pick has been recorded."""
     action = "Updated" if is_update else "Noted and recorded"
     formal = _formalize_pick(description)
     if odds == "placer":
-        return f"{action}, {player['formal_name']}. {formal} — placer to confirm odds at the bookie."
-    return f"{action}, {player['formal_name']}. {formal} @ {odds}."
+        placer_name = placer["formal_name"] if placer else "Placer"
+        body = f"{formal} — {placer_name} to confirm odds when placing the bet."
+    else:
+        display_text = _strip_odds_for_display(formal)
+        body = f"{display_text} @ {odds}."
+    if is_update and previous_description:
+        previous_formal = _formalize_pick(previous_description)
+        previous_display = _strip_odds_for_display(previous_formal)
+        return f"{action}, {player['formal_name']}.  Replacing {previous_display} with {body}"
+    return f"{action}, {player['formal_name']}.  {body}"
 
 
 def picks_status(submitted, missing):
@@ -51,15 +70,20 @@ def picks_status(submitted, missing):
     if not missing:
         return ""
     missing_names = [p["formal_name"] for p in missing]
-    return f"Awaiting selections from {_join_names(missing_names)}."
+    return f"Awaiting selection from {_join_names(missing_names)}."
 
 
 def all_picks_in(placer):
     """Announce all picks are in and who places the bet."""
     return (
-        f"All selections have been received. "
+        f"All selections have been received.  "
         f"{placer['formal_name']}, you are next in the rotation to place the wager."
     )
+
+
+def bet_slip_received(player):
+    """Confirm bet slip screenshot received from the placer."""
+    return f"Thank you, {player['formal_name']}.  Bet slip received and recorded."
 
 
 def result_announced(player, description, odds, outcome):
@@ -75,9 +99,10 @@ def result_announced(player, description, odds, outcome):
         prefix = "I must inform you"
 
     formal = _formalize_pick(description)
+    display_text = _strip_odds_for_display(formal) if odds != "placer" else formal
     return (
         f"{prefix} \u2014 {player['formal_name']}'s selection: "
-        f"{formal} @ {odds}. {verdict}"
+        f"{display_text} @ {odds}.  {verdict}"
     )
 
 
@@ -85,22 +110,22 @@ def penalty_suggested(player, streak_count, penalty_type, amount):
     """Suggest a penalty for Ed to confirm."""
     if penalty_type == "late":
         return (
-            f"{player['formal_name']}, your selection was received after the deadline. "
-            f"You will place next week's wager. Rotation queue updated."
+            f"{player['formal_name']}, your selection was received after the deadline.  "
+            f"You will place next week's wager.  Rotation queue updated."
         )
 
     if penalty_type == "streak_3":
         return (
             f"I regret to inform you that {player['formal_name']} has incurred "
-            f"{streak_count} consecutive losses. The suggested penalty is to pay "
-            f"for next week's bet. Mr Edmund, would you kindly confirm: "
+            f"{streak_count} consecutive losses.  The suggested penalty is to pay "
+            f"for next week's bet.  Mr Edmund, would you kindly confirm: "
             f"!confirm penalty {player['nickname']}"
         )
 
     return (
         f"I regret to inform you that {player['formal_name']} has incurred "
-        f"{streak_count} consecutive losses. The suggested penalty is "
-        f"\u20ac{amount:.0f} to the vault. Mr Edmund, would you kindly confirm: "
+        f"{streak_count} consecutive losses.  The suggested penalty is "
+        f"\u20ac{amount:.0f} to the vault.  Mr Edmund, would you kindly confirm: "
         f"!confirm penalty {player['nickname']}"
     )
 
@@ -109,16 +134,18 @@ def penalty_confirmed(player, amount, vault_total):
     """Confirm a penalty has been applied."""
     if amount > 0:
         return (
-            f"Penalty confirmed. Vault updated: \u20ac{vault_total:.0f} total.\n"
+            f"Penalty confirmed.  Vault updated: \u20ac{vault_total:.0f} total.\n"
             f"{player['formal_name']}, please send \u20ac{amount:.0f} to Mr Edmund via Revolut."
         )
     return (
-        f"Penalty confirmed. {player['formal_name']} will place next week's wager."
+        f"Penalty confirmed.  {player['formal_name']} will place next week's wager."
     )
 
 
-def weekend_summary(results, week_number):
-    """Post-weekend results summary."""
+def week_complete_summary(results, week_number, leaderboard, rotation_next):
+    """
+    Combined weekend summary and weekly recap, published when the final result is in.
+    """
     winners = [r for r in results if r["outcome"] == "win"]
     losers = [r for r in results if r["outcome"] == "loss"]
 
@@ -136,29 +163,21 @@ def weekend_summary(results, week_number):
     total = len(results)
     lines.append(f"Accumulator: {'Won' if won_count == total else 'Lost'} ({won_count} of {total} won)")
 
-    return "\n".join(lines)
-
-
-def weekly_recap(week_number, leaderboard, rotation_next):
-    """Monday morning recap."""
-    lines = [
-        f"Good morning, gentlemen. Week {week_number} recap:",
-        "",
-        "\U0001f3c6 LEADERBOARD",
-        "\u2501" * 22,
-    ]
-
-    medals = ["\U0001f947", "\U0001f948", "\U0001f949"]
-    for i, entry in enumerate(leaderboard):
-        medal = medals[i] if i < 3 else "  "
-        lines.append(
-            f"{medal} {entry['formal_name']}: {entry['win_rate']:.1f}% "
-            f"({entry['wins']}/{entry['total']})"
-        )
-        lines.append(f"   Form: {entry['form']}")
-
-    lines.append("")
-    lines.append(f"Next to place: {rotation_next['formal_name']}")
+    if leaderboard and rotation_next and rotation_next.get("formal_name"):
+        lines.extend([
+            "",
+            "\U0001f3c6 LEADERBOARD",
+            "\u2501" * 22,
+        ])
+        medals = ["\U0001f947", "\U0001f948", "\U0001f949"]
+        for i, entry in enumerate(leaderboard):
+            medal = medals[i] if i < 3 else "  "
+            lines.append(
+                f"{medal} {entry['formal_name']}: {entry['win_rate']:.1f}% "
+                f"({entry['wins']}/{entry['total']})"
+            )
+            lines.append(f"   Form: {entry['form']}")
+        lines.extend(["", f"Next to place: {rotation_next['formal_name']}"])
 
     return "\n".join(lines)
 
@@ -166,7 +185,7 @@ def weekly_recap(week_number, leaderboard, rotation_next):
 def reminder_thursday():
     """Thursday 7PM reminder to all players."""
     return (
-        "Good evening, gentlemen. May I remind you that picks are due "
+        "Good evening, gentlemen.  May I remind you that picks are due "
         "by 10 PM Friday."
     )
 
@@ -175,7 +194,7 @@ def reminder_friday(missing):
     """Friday 5PM reminder to missing players."""
     names = [p["formal_name"] for p in missing]
     return (
-        f"Pardon the interruption. {_join_names(names)} \u2014 "
+        f"Pardon the interruption.  {_join_names(names)} \u2014 "
         f"5 hours remain to submit your selections."
     )
 
@@ -184,8 +203,8 @@ def reminder_final(missing):
     """Friday 9:30PM final warning."""
     names = [p["formal_name"] for p in missing]
     return (
-        f"I do hope you'll forgive the urgency. {_join_names(names)} \u2014 "
-        f"30 minutes remain. This is the final reminder."
+        f"I do hope you'll forgive the urgency.  {_join_names(names)} \u2014 "
+        f"30 minutes remain.  This is the final reminder."
     )
 
 
@@ -248,7 +267,7 @@ def vault_display(total):
 
 
 def picks_display(picks, week_number=None):
-    """Format current week's picks for display."""
+    """Format current week's picks for display. Shows result (✅/❌) when available."""
     if not picks:
         return "No picks recorded for this week yet."
     lines = ["\U0001f4dc RECORDED PICKS", "\u2501" * 22]
@@ -258,7 +277,16 @@ def picks_display(picks, week_number=None):
     for p in picks:
         odds = p["odds_original"] if p["odds_original"] != "placer" else "(placer to confirm)"
         formal = _formalize_pick(p["description"])
-        lines.append(f"{p['formal_name']}: {formal} @ {odds}")
+        display_text = _strip_odds_for_display(formal) if p["odds_original"] != "placer" else formal
+        result_suffix = ""
+        outcome = p.get("result_outcome")
+        if outcome == "win":
+            result_suffix = " \u2705"
+        elif outcome == "loss":
+            result_suffix = " \u274c"
+        elif outcome == "void":
+            result_suffix = " Void"
+        lines.append(f"{p['formal_name']}: {display_text} @ {odds}{result_suffix}")
     return "\n".join(lines)
 
 
@@ -273,11 +301,13 @@ def help_text():
         "!rotation — Current rotation and queue\n"
         "!vault — Vault total\n"
         "!help — This message\n"
+        "!myphone — Your WhatsApp ID (for .env setup)\n"
         "\n"
-        "Admin (Mr Edmund only):\n"
+        "Admin:\n"
         "!confirm penalty [player] — Confirm a pending penalty\n"
         "!override [player] [win/loss] — Change a result\n"
-        "!resetweek — Reset the current week"
+        "!resetweek — Reset the current week\n"
+        "!resetseason — Clear all data for fresh start (next week = Week 1)"
     )
 
 

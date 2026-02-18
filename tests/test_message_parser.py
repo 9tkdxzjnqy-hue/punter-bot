@@ -134,6 +134,13 @@ class TestResultParsing:
         assert result["type"] == "result"
         assert result["parsed_data"]["player_nickname"] == "nialler"
 
+    def test_aidan_result_not_da(self):
+        """Aidan must match Aidan, not DA (da is substring of aidan)."""
+        result = parse_message("Aidan \u274c", "Ed")
+        assert result["type"] == "result"
+        assert result["parsed_data"]["player_nickname"] == "aidan"
+        assert result["parsed_data"]["outcome"] == "loss"
+
 
 class TestGeneralMessages:
     def test_regular_chat(self):
@@ -223,7 +230,7 @@ class TestCumulativePicks:
     """Cumulative format: emoji + pick per line."""
 
     def test_single_line_with_emoji(self):
-        emoji_map = {"\u265f\ufe0f": {"id": 1, "nickname": "Pawn", "formal_name": "Master"}}
+        emoji_map = {"\u265f\ufe0f": {"id": 1, "nickname": "Pawn", "formal_name": "Mr Aidan"}}
         results = parse_cumulative_picks("\u265f\ufe0f Dortmund to beat Mainz 6/10", emoji_map)
         assert len(results) == 1
         player, data = results[0]
@@ -233,7 +240,7 @@ class TestCumulativePicks:
 
     def test_multiple_lines(self):
         emoji_map = {
-            "\u265f\ufe0f": {"id": 1, "nickname": "Pawn", "formal_name": "Master"},
+            "\u265f\ufe0f": {"id": 1, "nickname": "Pawn", "formal_name": "Mr Aidan"},
             "\U0001f0cf": {"id": 2, "nickname": "Kev", "formal_name": "Mr Kevin"},
         }
         text = "\u265f\ufe0f Dortmund 6/10\n\U0001f0cf Liverpool 2/1"
@@ -249,7 +256,7 @@ class TestCumulativePicks:
         assert results == []
 
     def test_lines_without_matching_emoji_skipped(self):
-        emoji_map = {"\u265f\ufe0f": {"id": 1, "nickname": "Pawn", "formal_name": "Master"}}
+        emoji_map = {"\u265f\ufe0f": {"id": 1, "nickname": "Pawn", "formal_name": "Mr Aidan"}}
         results = parse_cumulative_picks(
             "\u265f\ufe0f Dortmund 6/10\nRandom text without emoji\n\U0001f0cf Liverpool 2/1",
             emoji_map,

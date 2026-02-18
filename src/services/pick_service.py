@@ -10,19 +10,29 @@ def submit_pick(player_id, week_id, description, odds_decimal, odds_original, be
     Store a pick for a player in a given week.
 
     Uses INSERT OR REPLACE so re-submissions update the existing pick.
-    Returns (pick_dict, is_update).
+    Returns (pick_dict, is_update, changed, previous_description).
+    previous_description: the old pick text when it's an update, else None.
     """
     conn = get_db()
 
     # Check if this player already has a pick for this week
     existing = conn.execute(
-        "SELECT id FROM picks WHERE week_id = ? AND player_id = ?",
+        "SELECT * FROM picks WHERE week_id = ? AND player_id = ?",
         (week_id, player_id),
     ).fetchone()
 
     is_late = 1 if is_past_deadline() else 0
+    previous_description = None
 
     if existing:
+        existing = dict(existing)
+        previous_description = existing["description"]
+        changed = (
+            existing["description"] != description
+            or str(existing["odds_original"]) != str(odds_original)
+            or float(existing["odds_decimal"]) != float(odds_decimal)
+            or existing["bet_type"] != bet_type
+        )
         conn.execute(
             "UPDATE picks SET description = ?, odds_decimal = ?, odds_original = ?, "
             "bet_type = ?, submitted_at = ?, is_late = ? "
@@ -40,6 +50,7 @@ def submit_pick(player_id, week_id, description, odds_decimal, odds_original, be
              bet_type, datetime.utcnow().isoformat(), is_late),
         )
         is_update = False
+        changed = True
 
     conn.commit()
 
@@ -49,15 +60,17 @@ def submit_pick(player_id, week_id, description, odds_decimal, odds_original, be
     ).fetchone()
     conn.close()
 
-    return dict(pick), is_update
+    return dict(pick), is_update, changed, previous_description
 
 
 def get_picks_for_week(week_id):
-    """Return all picks for a given week, joined with player info."""
+    """Return all picks for a given week, joined with player info and result if available."""
     conn = get_db()
     picks = conn.execute(
-        "SELECT p.*, pl.nickname, pl.formal_name FROM picks p "
+        "SELECT p.*, pl.nickname, pl.formal_name, r.outcome as result_outcome "
+        "FROM picks p "
         "JOIN players pl ON p.player_id = pl.id "
+        "LEFT JOIN results r ON r.pick_id = p.id "
         "WHERE p.week_id = ? ORDER BY p.submitted_at",
         (week_id,),
     ).fetchall()

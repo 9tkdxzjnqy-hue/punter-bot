@@ -2,8 +2,9 @@ import re
 
 from src.config import Config
 
-# Player nicknames used for result detection and test mode prefix matching
-PLAYER_NICKNAMES = {"ed", "kev", "da", "don", "nug", "nialler", "pawn", "nugget"}
+# Player nicknames/names used for result detection and test mode prefix matching
+# Include both nicknames (Pawn, DA) and first names (Aidan) for flexibility
+PLAYER_NICKNAMES = {"ed", "kev", "da", "don", "nug", "nialler", "pawn", "nugget", "aidan"}
 
 # Test mode prefix pattern: "Kev: some message" or "Ed: !stats"
 TEST_PREFIX = re.compile(
@@ -124,9 +125,11 @@ def _parse_result(text, sender, sender_phone=""):
     if WIN_EMOJI not in text and LOSS_EMOJI not in text:
         return None
 
-    text_lower = text.lower()
-    for nickname in PLAYER_NICKNAMES:
-        if nickname in text_lower:
+    # Match nicknames as whole words (so "da" doesn't match inside "Aidan")
+    # Sort by length descending so "nialler" matches before "nug" in "Nialler"
+    for nickname in sorted(PLAYER_NICKNAMES, key=len, reverse=True):
+        pattern = re.compile(r"\b" + re.escape(nickname) + r"\b", re.IGNORECASE)
+        if pattern.search(text):
             outcome = "win" if WIN_EMOJI in text else "loss"
             return _make_result("result", text, sender, {
                 "player_nickname": nickname,
@@ -231,5 +234,14 @@ def parse_cumulative_picks(text, emoji_to_player):
         pick = _parse_pick(pick_text, player["nickname"], "")
         if pick and pick["type"] == "pick":
             results.append((player, pick["parsed_data"]))
+        elif pick_text:
+            # In cumulative format, emoji prefix = pick line. Accept bare team names
+            # (e.g. "Villa", "Dortmund") that _parse_pick would reject.
+            results.append((player, {
+                "description": pick_text,
+                "odds_original": "placer",
+                "odds_decimal": 2.0,
+                "bet_type": "win",
+            }))
 
     return results

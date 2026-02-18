@@ -21,7 +21,7 @@ class TestPlayerStats:
         players = get_all_players()
         player = players[0]
 
-        pick, _ = submit_pick(player["id"], week["id"], "Test", 2.0, "evens", "win")
+        pick, _, _, _ = submit_pick(player["id"], week["id"], "Test", 2.0, "evens", "win")
         record_result(pick["id"], "win")
 
         stats = get_player_stats(player["id"])
@@ -80,11 +80,11 @@ class TestLeaderboard:
         players = get_all_players()
 
         # Player 0: 1 win
-        pick, _ = submit_pick(players[0]["id"], week["id"], "P1", 2.0, "evens", "win")
+        pick, _, _, _ = submit_pick(players[0]["id"], week["id"], "P1", 2.0, "evens", "win")
         record_result(pick["id"], "win")
 
         # Player 1: 1 loss
-        pick, _ = submit_pick(players[1]["id"], week["id"], "P2", 3.0, "2/1", "win")
+        pick, _, _, _ = submit_pick(players[1]["id"], week["id"], "P2", 3.0, "2/1", "win")
         record_result(pick["id"], "loss")
 
         entries = get_leaderboard()

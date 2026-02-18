@@ -12,7 +12,7 @@
 
 **Timeline:** No rush, sporadic development (few hours on weekends)
 
-**Budget:** Free tier (local hosting initially, AWS later if needed)
+**Budget:** Free tier — Oracle Cloud Always Free (permanently free, no expiry)
 
 ---
 
@@ -34,11 +34,11 @@ The bot uses formal butler-style addressing for all players:
 | DA (Don) | Mr Declan |
 | Nug (Nugget) | Mr Ronan |
 | Nialler | Mr Niall |
-| Pawn | Master |
+| Pawn | Mr Aidan |
 
 **Usage:** The bot uses these formal addresses in all communications (reminders, announcements, results, penalties).
 
-**Example:** "Good evening, gentlemen. Currently awaiting selections from Mr Ronan and Master."
+**Example:** "Good evening, gentlemen. Currently awaiting selection from Mr Ronan and Mr Aidan."
 
 ### Admin
 - **You** - Primary admin, product manager building the bot
@@ -64,10 +64,16 @@ Players often copy preceding picks and add their own, creating a cumulative mess
 - **Format:** One pick per line, each line prefixed with the player's emoji
 - **Example:**
   ```
-  ♟️ Dortmund to beat Mainz 6/10
-  🧌 Liverpool to win 2/1
-  🍋 Man City Brentford BTTS 8/11
+  ♟️ Villa
+  🔫 QPR 21/20
+  👴🏻 Scotland + 8
+  🍗 Wales +32.5 10/11
+  🍋🍋🍋 leics/Soton BTTS 4/6
+  🧌 Ireland -16
   ```
+- **Bare team names:** In cumulative format, emoji prefix indicates a pick line. Bare team names (e.g. "Villa", "Dortmund") are accepted even without odds or bet-type keywords; stored as `odds_original: "placer"`
+- **Replacement:** When a player changes their pick (e.g. Dortmund → Villa) and resends the thread, the new pick is detected and stored. If a player appears multiple times, the last occurrence wins
+
 - **Player emoji mapping** (stored in `players.emoji`, supports multiple aliases comma-separated):
 
 | Player | Nickname | Emoji(s) |
@@ -85,7 +91,8 @@ Players often copy preceding picks and add their own, creating a cumulative mess
 - **Invalid picks:** Bot attempts to interpret â†’ asks for confirmation
 - **Missing information:** Request clarification
 - **Duplicate submissions:** Accept latest as update
-- **Picks without odds:** Players may omit odds; they trust the placer to use whatever is available at the bookie (≥1.5). Stored as `odds_original: "placer"`, `odds_decimal: 2.0`. Bot confirms: "— placer to confirm odds at the bookie."
+- **Cumulative replacement:** When a player sends a thread/group message with their pick changed (e.g. Villa instead of Dortmund), the new pick is detected and stored. Bare team names (e.g. "♟️ Villa") are accepted in cumulative format
+- **Picks without odds:** Players may omit odds; they trust the placer to use whatever is available at the bookie (≥1.5). Stored as `odds_original: "placer"`, `odds_decimal: 2.0`. Bot confirms: "— [Placer name] to confirm odds when placing the bet." (Placer name from rotation.)
 
 #### Deadline Management
 - **Deadline:** Friday 10 PM (strict)
@@ -101,12 +108,13 @@ Players often copy preceding picks and add their own, creating a cumulative mess
 - Bot confirms each pick on receipt in butler style (no response required from player)
 - If a player sends a new pick, it replaces their previous submission for that week
 - If the bot misreads a pick, the player simply resends the corrected version
+- **Cumulative thread:** When adding a new pick to an existing thread, only confirm picks that are new or changed. Do not repeat confirmations for unchanged re-submissions (e.g. copying the full thread and adding one line — only confirm the new line).
 
 #### Formal Pick Display
 When the bot displays picks (confirmations, `!picks`, result announcements), it shows a **formal** version rather than echoing the raw message:
 - **Abbreviations expanded:** leics → Leicester, Soton → Southampton, Man City → Manchester City, etc.
 - **Team separator:** `leics/Soton` → `Leicester vs Southampton`
-- **Odds preserved:** Fractional odds (4/6, 2/1) are shown as submitted
+- **Odds shown once:** Odds are stripped from the description and shown only at the end as `@ [odds]` (e.g. "Dortmund to beat Mainz @ 6/10" not "Dortmund to beat Mainz 6/10 @ 6/10")
 - Raw input is stored in the database; formalization is applied only for display
 
 #### Automated Reminders
@@ -141,12 +149,15 @@ When the bot displays picks (confirmations, `!picks`, result announcements), it 
 
 #### Bet Slip Upload & Reading
 **CRITICAL FEATURE:**
-- Player uploads bet slip screenshot to WhatsApp
-- Bot reads image to extract:
+- Player uploads bet slip screenshot(s) to WhatsApp
+- **Multiple screenshots:** Screen size may limit what's visible; the full bet may require 2+ images. Bot must support parsing and combining multiple screenshots.
+- Bot reads image(s) to extract:
   - All picks and their odds
   - Total odds
   - Stake amount
   - Potential return
+  - **Bookmaker** (if visible in the image)
+- **Recorded picks can be updated** with details from the screenshot (e.g. actual odds, confirmation of stake/total)
 - Bot stores this for tracking and stats
 - Bot confirms: "Bet slip recorded: 6 picks @ 47.5 odds, â‚¬120 stake, potential return â‚¬5,700"
 
@@ -249,7 +260,7 @@ Penalties in Queue:
 
 #### Stats Access Methods
 1. **On-demand:** `!stats` command anytime
-2. **Monday morning recap:** Automated weekly summary
+2. **When all results in:** Combined week summary (results + leaderboard + next placer) posted immediately
 
 #### Leaderboard
 - **Ranking:** Pure win rate (not weighted by volume)
@@ -297,7 +308,7 @@ Penalties in Queue:
 **Example Communications:**
 
 **Reminder:**
-> "Good evening, gentlemen. May I remind you that picks are due by 10 PM Friday. Currently awaiting selections from Mr Ronan and Master."
+> "Good evening, gentlemen. May I remind you that picks are due by 10 PM Friday. Currently awaiting selection from Mr Ronan and Mr Aidan."
 
 **Penalty:**
 > "I regret to inform you that Mr Nialler has incurred five consecutive losses. The suggested penalty is €50 to the vault. Mr Edmund, would you kindly confirm?"
@@ -327,7 +338,7 @@ Penalties in Queue:
 #### Critical Uptime Windows
 - **Friday 5 PM - 10 PM:** Deadline reminders and pick collection
 - **Saturday - Sunday:** Result tracking
-- **Monday morning:** Weekly recap
+- **Saturday - Sunday:** Week summary posted when final result is in
 - **Overall:** Friday 5 PM â†’ Monday 10 AM
 
 #### Downtime Acceptable
@@ -338,6 +349,20 @@ Penalties in Queue:
 - **Manual override:** Ed must be able to manually enter everything
 - **Error handling:** All errors must be recoverable without data loss
 - **Backup:** Ed can access bot admin to fix issues
+
+#### Reliability Improvements
+1. **PM2 Process Manager** (implemented)
+   - Manages both the Node.js bridge and Python backend
+   - Auto-restarts either process on crash
+   - Restarts both on machine reboot
+   - Same setup on local machine and Oracle Cloud (Phase 0.5)
+
+2. **Health Check Script with Alerting** (to be built)
+   - Pings bot's `/health` endpoint every 5 minutes
+   - Sends alert if bot is unresponsive
+   - On local machine: desktop notification or log file
+   - On Oracle Cloud: Telegram bot alert (free, works from phone anywhere)
+   - Health check process also managed by PM2
 
 ---
 
@@ -358,15 +383,26 @@ Penalties in Queue:
 ### 4.3 Platform & Hosting
 
 #### Initial Setup
-- **Platform:** Local hosting (your machine)
+- **Platform:** Local hosting (your machine) initially; migrate to Oracle Cloud (Phase 0.5)
 - **Architecture:** Python + whatsapp-web.js
 - **Database:** SQLite
 - **Budget:** Free
 
-#### Future Migration
-- **Platform:** AWS (when ready)
-- **You cover costs:** Long-term AWS hosting
-- **Budget:** Keep minimal (~$6/month EC2)
+#### Cloud Deployment (Phase 0.5 — Cloud Migration)
+- **Goal:** Run bot 24/7 so it's available when laptop is off/unavailable
+- **Target: Oracle Cloud Always Free** — $0, permanently free, no expiry. AWS is no longer the target.
+- **Home region:** UK South (London) — closest region to Ireland (no Irish region exists). **Must choose carefully at signup — home region cannot be changed after signup.**
+- **Fallback region:** Netherlands Northwest (Amsterdam) if London ARM capacity is unavailable at signup
+- **Compute:** Ampere A1 ARM instance — up to 4 OCPUs / 24GB RAM free. Start with 1 OCPU / 1GB RAM
+- **Fallback compute:** AMD Always Free instance if ARM unavailable
+- **Storage:** 200GB block storage (always free) — sufficient for SQLite + bet slip images
+- **After signup:** Convert account to Pay-As-You-Go to prevent suspension (Always Free resources remain free)
+- **Docker:** Use Docker for deployment; simplifies Chrome setup, updates (`docker-compose build && up -d`), and environment consistency
+- **Requirements:** 2GB+ RAM for Chromium (Oracle ARM Ampere: create 1 VM with 2GB+ from 24GB free allowance). Persistent volumes for SQLite and WhatsApp session (`~/.wwebjs_auth`). QR/auth flow for first-time setup on headless server.
+- **Docker benefits:** Same image everywhere; `docker-compose build && up -d` for updates; Chrome pre-installed in base image; no manual apt install
+
+#### Fallback (if Oracle unavailable)
+- **Hetzner:** ~€4–5/month
 
 #### Sports Data APIs
 - **Budget:** $0 - must use free tiers only
@@ -392,6 +428,12 @@ Penalties in Queue:
 - **Bridge uses `message_create` event** (not `message`) — captures own messages for test group use
 - **Bot reply loop prevention** — bridge tracks sent messages via `botSentMessages` set
 - **Flask runs on port 5001** — port 5000 is used by AirPlay Receiver on macOS
+
+#### Availability & Restart (Testing)
+- **Detached Frame:** Puppeteer/Chromium can lose the WhatsApp Web session. Bridge auto-reconnects (destroy + reinitialize) when detected; Flask retries send up to 3 times on 503
+- **Puppeteer args:** `--disable-features=site-per-process` reduces detached Frame frequency
+- **Restart script:** `./scripts/restart.sh` kills Flask and bridge processes; use when ports are stuck or session is unrecoverable
+- **PM2:** Production process manager — manages both bridge and Flask; auto-restarts on crash and on machine reboot. See `ecosystem.config.js`
 
 ---
 
@@ -425,7 +467,7 @@ Penalties in Queue:
 - âœ… Penalty tracking (3/5/7/10-loss)
 - âœ… Stats on demand (!stats command)
 - âœ… Vault tracking
-- âœ… Monday morning recap
+- âœ… Week summary when all results in (results + leaderboard + next placer)
 - âœ… Bet slip image reading & parsing
 
 ### Should-Have (Phase 2)
@@ -527,7 +569,7 @@ Sunday 8 PM - All results in
          Lost: Nug, Nialler, Pawn
          Accumulator: Lost (3 of 6 won)"
 
-Monday 9 AM - Weekly recap
+(Combined above: results + leaderboard + next to place)
 â””â”€> Bot: [Posts weekly statistics summary]
 ```
 
@@ -583,6 +625,14 @@ Saturday 10 AM - Unclear bet slip image
 - âœ… Basic message parsing
 - âœ… Test with group
 
+### Phase 0.5: Cloud Migration
+- Sign up for Oracle Cloud Always Free (London region)
+- Provision ARM instance (1 OCPU / 1GB RAM to start)
+- Migrate bot from local machine to OCI
+- Configure PM2 on cloud server
+- Validate bot runs unattended Friday–Monday
+- Test remote restart via OCI web console (no laptop needed)
+
 ### Phase 1: MVP (Week 3-4)
 - Pick collection with validation
 - Automated reminders
@@ -596,11 +646,12 @@ Saturday 10 AM - Unclear bet slip image
 - Bet slip image reading (OCR)
 - Rotation queue visibility
 - Leaderboard
-- Monday recap
+- Week summary (when all results in)
 - Polish butler personality
 
 ### Phase 3: Intelligence (Week 7-8)
 - API integration (The Odds API, API-Football)
+- **Match start validation** — Check if a pick is for a match that has already started; warn or void (e.g. Thursday match picked on Friday after kick-off)
 - Automatic result detection
 - Live score updates
 - Historical analytics
@@ -671,6 +722,7 @@ Sports APIs (Phase 3)
 | Risk | Impact | Likelihood | Mitigation |
 |------|--------|------------|------------|
 | Bot crashes Friday night | High | Medium | Manual fallback, Ed override, PM2 auto-restart |
+| Bot unresponsive silently | High | Medium | Health check script with alerting (Telegram on OCI, desktop/log on local) |
 | WhatsApp ban/block | High | Low | Use official Business API eventually, proper rate limiting |
 | Missed results | Medium | Medium | Manual entry fallback, Ed confirmation |
 | Wrong penalty calculation | Medium | Low | Ed confirmation before applying, manual override |
@@ -680,6 +732,8 @@ Sports APIs (Phase 3)
 
 | Risk | Impact | Likelihood | Mitigation |
 |------|--------|------------|------------|
+| Oracle ARM capacity unavailable at signup | Medium | Medium | Use Amsterdam (Netherlands Northwest) as fallback region |
+| Oracle account suspended | Medium | Low | Convert to Pay-As-You-Go after signup (Always Free resources remain free) |
 | API rate limits exceeded | Medium | Medium | Caching, smart polling, free tier monitoring |
 | Database corruption | Medium | Low | Daily backups, transaction safety |
 | Player confusion with commands | Low | Medium | Clear help text, butler clarifications |
@@ -740,6 +794,19 @@ Sports APIs (Phase 3)
 
 ## 13. Acceptance Criteria
 
+### Phase 0.5 Complete When:
+- [ ] PM2 configured and managing both bridge and Flask (`ecosystem.config.js`)
+- [ ] PM2 auto-restart on crash verified
+- [ ] PM2 startup on machine reboot configured (`pm2 save`, `pm2 startup`)
+- [ ] Health check script pings `/health` every 5 minutes
+- [ ] Health check alerting works (desktop/log on local; Telegram on OCI)
+- [ ] Health check process managed by PM2
+- [ ] Oracle Cloud account created (UK South London region; Amsterdam fallback if ARM unavailable)
+- [ ] OCI instance provisioned (ARM Ampere 1 OCPU / 1GB RAM; AMD fallback if needed)
+- [ ] Bot migrated from local machine to OCI
+- [ ] Bot runs unattended Friday–Monday on OCI
+- [ ] Remote restart verified via OCI web console (no laptop needed)
+
 ### MVP Complete When:
 - [ ] Bot connects to WhatsApp group
 - [ ] Thursday 7 PM reminder sends automatically
@@ -752,7 +819,7 @@ Sports APIs (Phase 3)
 - [ ] Ed can confirm penalties with command
 - [ ] Rotation queue displays correctly
 - [ ] !stats command shows player statistics
-- [ ] Monday 9 AM recap posts automatically
+- [ ] Week summary (results + leaderboard + next placer) posts when final result is in
 - [ ] Ed can manually override any result
 - [ ] Bot runs Friday-Monday without intervention
 - [ ] All data persists in database
@@ -853,19 +920,21 @@ Sports APIs (Phase 3)
 
 ## Document History
 
-**Version 1.0** - Initial requirements document
+**Versioning:** 0.x until MVP testing is successful; then 1.0.
+
+**Version 0.1** - Initial requirements document
 - Based on discovery session with product owner
 - 54 questions answered
 - All critical decisions documented
 - Ready for technical specification phase
 
-**Version 1.1** - Phase 1 planning updates
+**Version 0.2** - Phase 1 planning updates
 - Submission window changed from Thursday 7PM to Wednesday 7PM
 - Added pick confirmation behavior (confirm on receipt, no response required)
 - Added test mode documentation (prefix format for test group)
 - Documented bridge architecture decisions (IPv4, message_create event, http module)
 
-**Version 1.2** - Phase 1 implementation complete (2026-02-12)
+**Version 0.3** - Phase 1 implementation complete (2026-02-12)
 - Phase 0 and Phase 1 fully implemented and tested
 - 73 unit tests passing across parser and all service modules
 - End-to-end WhatsApp testing verified (picks, results, commands, penalties, rotation)
@@ -874,31 +943,69 @@ Sports APIs (Phase 3)
 - Command args parser fixed to split all arguments individually
 - `!stats [player]` added for viewing other players' stats
 
-**Version 1.3** - Cumulative pick format (2026-02-13)
+**Version 0.4** - Cumulative pick format (2026-02-13)
 - Added emoji-based cumulative message parsing: one pick per line, `[emoji] [pick]`
 - Player emoji mapping stored in `players.emoji` (supports multiple aliases, e.g. Ed: 🍋,🍋🍋🍋)
 - Enables copying thread-style messages from main group into test group for testing
 - All 6 players have emojis configured
 
-**Version 1.4** - Picks without odds (2026-02-13)
+**Version 0.5** - Picks without odds (2026-02-13)
 - Players may submit picks without explicit odds (e.g. "Scotland + 8", "Dortmund to beat Mainz")
 - Player trusts placer to use whatever odds are available at the bookie (≥1.5)
 - Stored as `odds_original: "placer"`, `odds_decimal: 2.0`
 - Pick detection: bet type keywords (BTTS, handicap, over/under), "to beat"/"to win", team vs team
-- Cumulative thread: only acknowledge new picks, not re-submissions already in the thread
 
-**Version 1.5** - Formal pick display (2026-02-13)
+**Version 0.6** - Formal pick display (2026-02-13)
 - Bot displays formalized pick text in confirmations, `!picks`, and result announcements
 - Abbreviations expanded (leics→Leicester, Soton→Southampton, Man City→Manchester City, etc.)
 - Team separator `/` rendered as " vs " (e.g. leics/Soton → Leicester vs Southampton)
 - Raw input stored in DB; formalization applied at display time only
 - `!picks` command added to view recorded picks for the current week
 
-**Next Review:** After Phase 2 planning
+**Version 0.7** - Pick confirmation refinements (2026-02-13)
+- **No-odds picks:** Confirmation now names the placer: "[Mr Edmund] to confirm odds when placing the bet" (instead of "placer to confirm odds at the bookie")
+- **Cumulative thread:** Only confirm picks that are new or changed. When adding a pick to an existing thread, do not repeat confirmations for unchanged re-submissions
+- `submit_pick` returns `(pick, is_update, changed)` — `changed` indicates whether to include in confirmation (new pick or data actually changed)
+
+**Version 0.8** - Display and availability (2026-02-13)
+- **Odds shown once:** Strip odds from description before display; show only at end as `@ [odds]` in confirmations, `!picks`, and result announcements
+- **Availability:** Puppeteer `--disable-features=site-per-process` reduces detached Frame errors; bridge auto-reconnects on detached Frame; Flask retries send up to 3× on 503; `./scripts/restart.sh` kills stuck processes
+
+**Version 0.9** - Copy and addressing (2026-02-13)
+- **Awaiting selection:** Use singular "Awaiting selection from" (not "selections")
+- **Pawn formal name:** Mr Aidan (was Master) — consistent with other players (Mr Edmund, Mr Kevin, etc.)
+
+**Version 0.10** - Bet slip planning (2026-02-13)
+- **Recorded picks updatable:** Screenshot data can update existing picks (e.g. actual odds, confirmation)
+- **Multiple screenshots:** Support parsing 2+ images when full bet doesn't fit on one screen
+- **Bookmaker:** Record bookmaker if visible in the image
+
+**Version 0.11** - Cloud deployment planning (2026-02-13)
+- **Phase 2:** Cloud deployment for 24/7 availability (bot unavailable when laptop off)
+- **Target: Oracle Cloud Free Tier** — $0, always free; primary option
+- **Fallback:** Hetzner ~€5/mo if Oracle unavailable
+- **Docker:** Simplifies Chrome setup, updates, and maintenance
+- **Requirements:** 2GB+ RAM (ARM Ampere preferred for free tier), persistent volumes for DB and WhatsApp session
+
+**Version 0.12** - Pick validation planning (2026-02-13)
+- **Phase 3:** Match start validation — API check if match has started; warn or void picks for matches already kicked off (e.g. Thursday match picked on Friday)
+
+**Version 0.13** - Cumulative pick replacement (2026-02-13)
+- **Bare team names:** In cumulative format, emoji prefix = pick line. Accept bare team names (e.g. "Villa", "Dortmund") that single-message parsing would reject; stored as `odds_original: "placer"`
+- **Replacement detection:** When a player sends a cumulative message with a changed pick (e.g. Dortmund → Villa because match had started), the new pick is correctly detected and stored
+- **Deduplication:** When a player appears multiple times in a cumulative message, only the last occurrence is used (replacement pick at end of thread wins)
+
+**Version 0.14** - Hosting and reliability (2026-02-17)
+- **Hosting:** Oracle Cloud Always Free replaces AWS — UK South (London) primary, Amsterdam fallback; ARM Ampere preferred; Pay-As-You-Go conversion after signup
+- **Reliability:** PM2 process manager (implemented); health check script with alerting (to be built)
+- **Phase 0.5:** Cloud Migration phase inserted between Phase 0 and Phase 1
+- **Risks:** Added bot unresponsive silently, Oracle ARM capacity, Oracle account suspension; updated crash mitigation with PM2
+
+**Next Review:** After Phase 0.5 completion
 
 ---
 
 **Document Owner:** You (Primary Admin)
 **Stakeholders:** Ed (Co-admin), The Lads (Users)
-**Last Updated:** 2026-02-13
+**Last Updated:** 2026-02-17
 **Status:** âœ… Requirements Complete - Ready for Development

@@ -20,6 +20,7 @@ def test_db(monkeypatch):
     monkeypatch.setattr("src.config.Config.DB_PATH", db_path)
     monkeypatch.setattr("src.config.Config.TIMEZONE", "Europe/Dublin")
     monkeypatch.setattr("src.config.Config.TEST_MODE", True)
+    monkeypatch.setattr("src.config.Config.ROTATION_ORDER", [])  # Use DB rotation_position
 
     from src.db import init_db
     init_db()

@@ -130,7 +130,7 @@ class TestCumulativePickWebhook:
         # Should only acknowledge Ed's new pick, not Pawn/Kev re-submissions
         assert "Mr Edmund" in data["reply"]
         assert "Manchester City BTTS" in data["reply"]  # Formal display (Man City -> Manchester City)
-        assert "Master" not in data["reply"]  # Pawn not re-acknowledged
+        assert "Mr Aidan" not in data["reply"]  # Pawn not re-acknowledged
         assert "Mr Kevin" not in data["reply"]  # Kev not re-acknowledged
 
     def test_parse_cumulative_with_emoji_map(self, test_db):
@@ -150,3 +150,237 @@ class TestCumulativePickWebhook:
         assert results[0][1]["odds_original"] == "6/10"
         assert results[1][0]["nickname"] == "Kev"
         assert results[1][1]["odds_original"] == "2/1"
+
+    def test_cumulative_accepts_bare_team_names(self, test_db, monkeypatch):
+        """Bare team names like 'Villa' in cumulative format are accepted (emoji = pick context)."""
+        _seed_player_emojis()
+        monkeypatch.setattr("src.app.is_within_submission_window", lambda: True)
+        monkeypatch.setattr("src.config.Config.GROUP_CHAT_ID", "test-group@g.us")
+
+        from src.app import create_app
+
+        app = create_app()
+        client = app.test_client()
+
+        body = (
+            "♟️ Villa\n"
+            "🔫 QPR 21/20\n"
+            "👴🏻 Scotland + 8\n"
+            "🍗 Wales +32.5 10/11\n"
+            "🍋🍋🍋 leics/Soton BTTS 4/6\n"
+            "🧌 Ireland -16 🏉"
+        )
+
+        resp = client.post(
+            "/webhook",
+            json={
+                "sender": "Aidan",
+                "sender_phone": "",
+                "body": body,
+                "group_id": "test-group@g.us",
+                "has_media": False,
+            },
+            content_type="application/json",
+        )
+
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["action"] == "replied"
+
+        week = get_or_create_current_week()
+        picks = get_picks_for_week(week["id"])
+        descriptions = {p["nickname"]: p["description"] for p in picks}
+
+        assert descriptions["Pawn"] == "Villa"
+        assert descriptions["Nialler"] == "QPR 21/20"
+        assert "Scotland + 8" in descriptions["DA"]
+        assert "Wales +32.5 10/11" in descriptions["Nug"]
+        assert "leics/Soton BTTS 4/6" in descriptions["Ed"]
+        assert "Ireland -16" in descriptions["Kev"]
+
+    def test_cumulative_replacement_pick_detected(self, test_db, monkeypatch):
+        """When changing pick (e.g. Dortmund -> Villa), cumulative message updates correctly."""
+        _seed_player_emojis()
+        monkeypatch.setattr("src.app.is_within_submission_window", lambda: True)
+        monkeypatch.setattr("src.config.Config.GROUP_CHAT_ID", "test-group@g.us")
+
+        from src.app import create_app
+        from src.services.pick_service import submit_pick
+        from src.services.week_service import get_or_create_current_week
+        from src.services.player_service import get_all_players
+
+        app = create_app()
+        client = app.test_client()
+
+        # First: Pawn had Dortmund
+        week = get_or_create_current_week()
+        players = get_all_players()
+        pawn = next(p for p in players if p["nickname"] == "Pawn")
+        submit_pick(pawn["id"], week["id"], "Dortmund 6/10", 1.6, "6/10", "win")
+
+        # User sends cumulative message with Villa (Dortmund had started)
+        body = (
+            "♟️ Villa\n"
+            "🔫 QPR 21/20\n"
+            "👴🏻 Scotland + 8\n"
+            "🍗 Wales +32.5 10/11\n"
+            "🍋🍋🍋 leics/Soton BTTS 4/6\n"
+            "🧌 Ireland -16"
+        )
+        resp = client.post(
+            "/webhook",
+            json={
+                "sender": "Aidan",
+                "sender_phone": "",
+                "body": body,
+                "group_id": "test-group@g.us",
+                "has_media": False,
+            },
+            content_type="application/json",
+        )
+
+        assert resp.status_code == 200
+        picks = get_picks_for_week(week["id"])
+        pawn_pick = next(p for p in picks if p["nickname"] == "Pawn")
+        assert pawn_pick["description"] == "Villa"
+
+    def test_placer_screenshot_records_bet_placed(self, test_db, monkeypatch):
+        """When next placer posts a screenshot (all picks in), record bet as placed."""
+        _seed_player_emojis()
+        monkeypatch.setattr("src.app.is_within_submission_window", lambda: True)
+        monkeypatch.setattr("src.config.Config.GROUP_CHAT_ID", "test-group@g.us")
+
+        from src.app import create_app
+        from src.services.week_service import get_or_create_current_week
+        from src.services.rotation_service import get_next_placer
+        from src.services.pick_service import submit_pick
+        from src.services.player_service import get_all_players
+
+        app = create_app()
+        client = app.test_client()
+
+        week = get_or_create_current_week()
+        players = get_all_players()
+
+        # Submit all 6 picks so "all picks in"
+        for p in players:
+            submit_pick(p["id"], week["id"], f"{p['nickname']} pick 2/1", 3.0, "2/1", "win")
+
+        # Kev is next (no history)
+        placer = get_next_placer()
+        assert placer["nickname"] == "Kev"
+
+        # Kev posts screenshot (has_media, TEST_MODE prefix for sender)
+        resp = client.post(
+            "/webhook",
+            json={
+                "sender": "Kevin",
+                "sender_phone": "",
+                "body": "Kev: ",  # Caption with prefix; could be empty
+                "group_id": "test-group@g.us",
+                "has_media": True,
+            },
+            content_type="application/json",
+        )
+
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["action"] == "replied"
+        assert "Mr Kevin" in data["reply"]
+        assert "Bet slip received" in data["reply"]
+
+        # Complete week so get_next_placer uses it; Nialler should be next
+        from src.db import get_db
+        conn = get_db()
+        conn.execute("UPDATE weeks SET status = 'completed' WHERE id = ?", (week["id"],))
+        conn.commit()
+        conn.close()
+
+        next_placer = get_next_placer()
+        assert next_placer["nickname"] == "Nialler"
+
+    def test_placer_text_confirmation_records_bet_placed(self, test_db, monkeypatch):
+        """When next placer posts text like 'placed' or 'bet slip' (no media), also record."""
+        _seed_player_emojis()
+        monkeypatch.setattr("src.app.is_within_submission_window", lambda: True)
+        monkeypatch.setattr("src.config.Config.GROUP_CHAT_ID", "test-group@g.us")
+
+        from src.app import create_app
+        from src.services.week_service import get_or_create_current_week
+        from src.services.rotation_service import get_next_placer
+        from src.services.pick_service import submit_pick
+        from src.services.player_service import get_all_players
+
+        app = create_app()
+        client = app.test_client()
+
+        week = get_or_create_current_week()
+        players = get_all_players()
+
+        for p in players:
+            submit_pick(p["id"], week["id"], f"{p['nickname']} pick 2/1", 3.0, "2/1", "win")
+
+        placer = get_next_placer()
+        assert placer["nickname"] == "Kev"
+
+        # Kev posts "placed" (no image - e.g. forwarded msg, doc, or plain text)
+        resp = client.post(
+            "/webhook",
+            json={
+                "sender": "Kevin",
+                "sender_phone": "",
+                "body": "Kev: placed",
+                "group_id": "test-group@g.us",
+                "has_media": False,
+            },
+            content_type="application/json",
+        )
+
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["action"] == "replied"
+        assert "Mr Kevin" in data["reply"]
+        assert "Bet slip received" in data["reply"]
+
+    def test_admin_forwarding_placer_screenshot_records_bet(self, test_db, monkeypatch):
+        """When Ed forwards the placer's screenshot, record the bet as placed."""
+        _seed_player_emojis()
+        monkeypatch.setattr("src.app.is_within_submission_window", lambda: True)
+        monkeypatch.setattr("src.config.Config.GROUP_CHAT_ID", "test-group@g.us")
+
+        from src.app import create_app
+        from src.services.week_service import get_or_create_current_week
+        from src.services.rotation_service import get_next_placer
+        from src.services.pick_service import submit_pick
+        from src.services.player_service import get_all_players
+
+        app = create_app()
+        client = app.test_client()
+
+        week = get_or_create_current_week()
+        players = get_all_players()
+
+        for p in players:
+            submit_pick(p["id"], week["id"], f"{p['nickname']} pick 2/1", 3.0, "2/1", "win")
+
+        placer = get_next_placer()
+        assert placer["nickname"] == "Kev"
+
+        # Ed reposts/forwards the placer's screenshot (sender is Ed, not Kev)
+        resp = client.post(
+            "/webhook",
+            json={
+                "sender": "Edmund",
+                "sender_phone": "",
+                "body": "Ed: ",
+                "group_id": "test-group@g.us",
+                "has_media": True,
+            },
+            content_type="application/json",
+        )
+
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["action"] == "replied"
+        assert "Mr Kevin" in data["reply"]
+        assert "Bet slip received" in data["reply"]

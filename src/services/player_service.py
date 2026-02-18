@@ -48,6 +48,30 @@ def get_all_players():
     return [dict(p) for p in players]
 
 
+def get_rotation_order():
+    """
+    Return players in rotation order. Uses ROTATION_ORDER from config if set,
+    otherwise rotation_position. Used for determining who places next.
+    """
+    from src.config import Config
+
+    all_players = get_all_players()
+    if not Config.ROTATION_ORDER:
+        return all_players
+
+    by_nickname = {p["nickname"].lower(): p for p in all_players}
+    result = []
+    for nick in Config.ROTATION_ORDER:
+        p = by_nickname.get(nick.strip().lower())
+        if p:
+            result.append(p)
+    # Include any players not in config (e.g. new additions)
+    for p in all_players:
+        if p not in result:
+            result.append(p)
+    return result
+
+
 def get_player_by_id(player_id):
     """Return a single player by ID."""
     conn = get_db()
@@ -59,9 +83,15 @@ def get_player_by_id(player_id):
 
 
 def is_admin(sender_phone):
-    """Check if the sender is Ed (admin)."""
+    """Check if the sender is an admin (Ed, you/superadmin, or others in ADMIN_PHONES)."""
     from src.config import Config
-    return sender_phone and sender_phone == Config.ADMIN_PHONE
+    if not sender_phone:
+        return False
+    if sender_phone == Config.SUPERADMIN_PHONE:
+        return True
+    if Config.ADMIN_PHONES:
+        return sender_phone in Config.ADMIN_PHONES
+    return sender_phone == Config.ADMIN_PHONE
 
 
 def is_superadmin(sender_phone):

@@ -72,3 +72,38 @@
 - **Phase 1 complete**: All services wired up, commands working, scheduler initialized
 - **Next**: Live weekend test — copy picks from main group using `Kev: pick text` prefix format
 - **Cumulative format** (2026-02-13): Emoji-based parsing added — copy thread-style messages (`[emoji] [pick]` per line) from main group; all 6 players have emojis configured (Ed 🍋, Kev 🧌, DA 👴🏻, Nug 🍗, Nialler 🔫, Pawn ♟️)
+- **Cumulative replacement** (2026-02-13): Bare team names (e.g. "♟️ Villa") accepted; when player changes pick in thread, new pick detected and stored; last occurrence wins when player appears multiple times
+
+## Phase 0.5: Cloud Migration [IN PROGRESS]
+
+### PM2 & Reliability (local — done)
+- [x] PM2 ecosystem.config.js for bridge + Flask
+- [x] PM2 auto-restart on crash
+- [x] PM2 startup on machine reboot
+- [x] Health check script (pings /health every 5 min)
+- [x] Health check alerting (desktop notification on macOS; log file)
+
+### Oracle Cloud Migration
+- [ ] Sign up Oracle Cloud Always Free (UK South London; Amsterdam fallback)
+- [ ] Provision ARM instance (1 OCPU / 1GB RAM)
+- [ ] Migrate bot to OCI
+- [ ] Validate unattended Fri–Mon run
+- [ ] Test remote restart via OCI console
+
+## Phase 2: Enhancements [PLANNED]
+
+### Bet Slip & Other
+- [ ] Bet slip image reading (OCR)
+- [ ] Rotation queue visibility
+- [ ] Leaderboard
+- [ ] Monday recap
+- [ ] Polish butler personality
+
+## Phase 3: Intelligence [PLANNED]
+
+### API & Validation
+- [ ] API integration (The Odds API, API-Football)
+- [ ] **Match start validation** — Check if pick is for a match that has already started; warn or void (e.g. Thursday match picked on Friday after kick-off)
+- [ ] Automatic result detection
+- [ ] Live score updates
+- [ ] Historical analytics

@@ -69,6 +69,24 @@ def get_current_week():
     return dict(week) if week else None
 
 
+def get_week_for_reset():
+    """
+    Return a week that can be reset: current open/closed, or most recent completed.
+    Used by !resetweek to allow re-testing after a week is completed.
+    """
+    week = get_current_week()
+    if week:
+        return week
+    conn = get_db()
+    season = str(_now().year)
+    week = conn.execute(
+        "SELECT * FROM weeks WHERE status = 'completed' AND season = ? ORDER BY id DESC LIMIT 1",
+        (season,),
+    ).fetchone()
+    conn.close()
+    return dict(week) if week else None
+
+
 def close_week(week_id):
     """Mark a week as closed (deadline passed)."""
     conn = get_db()

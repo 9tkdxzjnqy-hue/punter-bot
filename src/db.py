@@ -36,12 +36,12 @@ def seed_players(conn):
         return
 
     players = [
-        ("Edmund", "Ed", "Mr Edmund", None, None, 6),
-        ("Kevin", "Kev", "Mr Kevin", None, None, 1),
-        ("Declan", "DA", "Mr Declan", None, None, 5),
-        ("Ronan", "Nug", "Mr Ronan", None, None, 3),
-        ("Nialler", "Nialler", "Mr Niall", None, None, 2),
-        ("Pawn", "Pawn", "Master", None, None, 4),
+        ("Edmund", "Ed", "Mr Edmund", "🍋,🍋🍋🍋", None, 6),
+        ("Kevin", "Kev", "Mr Kevin", "🧌", None, 1),
+        ("Declan", "DA", "Mr Declan", "👴🏻", None, 5),
+        ("Ronan", "Nug", "Mr Ronan", "🍗", None, 3),
+        ("Nialler", "Nialler", "Mr Niall", "🔫", None, 2),
+        ("Aidan", "Pawn", "Mr Aidan", "♟️", None, 4),
     ]
 
     conn.executemany(

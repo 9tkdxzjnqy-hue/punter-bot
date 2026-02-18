@@ -14,8 +14,6 @@ from src.services.pick_service import get_missing_players
 from src.services.week_service import (
     get_or_create_current_week, get_current_week, close_week, is_past_deadline,
 )
-from src.services.stats_service import get_leaderboard
-from src.services.rotation_service import get_next_placer
 import src.butler as butler
 
 logger = logging.getLogger(__name__)
@@ -84,16 +82,6 @@ def init_scheduler(send_message_fn):
         hour=22,
         minute=0,
         id="close_week",
-    )
-
-    # Monday 9AM — weekly recap
-    _scheduler.add_job(
-        _job_weekly_recap,
-        "cron",
-        day_of_week="mon",
-        hour=9,
-        minute=0,
-        id="weekly_recap",
     )
 
     _scheduler.start()
@@ -170,28 +158,3 @@ def _job_close_week():
             logger.info("Week %s closed (deadline passed)", week["week_number"])
     except Exception:
         logger.exception("Error in close_week job")
-
-
-def _job_weekly_recap():
-    """Monday 9AM: Post the weekly recap to the group."""
-    try:
-        from src.db import get_db
-        conn = get_db()
-        # Get the most recently completed week
-        week = conn.execute(
-            "SELECT * FROM weeks WHERE status = 'completed' ORDER BY id DESC LIMIT 1"
-        ).fetchone()
-        conn.close()
-
-        if not week:
-            logger.info("Weekly recap skipped — no completed week found")
-            return
-
-        leaderboard = get_leaderboard()
-        next_placer = get_next_placer()
-
-        if leaderboard and next_placer:
-            _send(butler.weekly_recap(week["week_number"], leaderboard, next_placer))
-            logger.info("Weekly recap sent for week %s", week["week_number"])
-    except Exception:
-        logger.exception("Error in weekly_recap job")

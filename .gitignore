@@ -20,6 +20,9 @@ data/
 bridge/.wwebjs_auth/
 bridge/.wwebjs_cache/
 
+# PM2 logs
+logs/
+
 # OS
 .DS_Store
 Thumbs.db

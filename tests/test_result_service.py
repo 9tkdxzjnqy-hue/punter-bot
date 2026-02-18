@@ -14,7 +14,7 @@ def _setup_pick(player_idx=0):
     week = get_or_create_current_week()
     players = get_all_players()
     player = players[player_idx]
-    pick, _ = submit_pick(player["id"], week["id"], "Test pick", 2.0, "evens", "win")
+    pick, _, _, _ = submit_pick(player["id"], week["id"], "Test pick", 2.0, "evens", "win")
     return week, player, pick
 
 
@@ -124,7 +124,7 @@ class TestWeekResults:
 
         # Submit and record results for all players
         for player in players:
-            pick, _ = submit_pick(player["id"], week["id"], "Test", 2.0, "evens", "win")
+            pick, _, _, _ = submit_pick(player["id"], week["id"], "Test", 2.0, "evens", "win")
             record_result(pick["id"], "win")
 
         assert all_results_in(week["id"]) is True
@@ -133,7 +133,7 @@ class TestWeekResults:
         week = get_or_create_current_week()
         players = get_all_players()
 
-        pick, _ = submit_pick(players[0]["id"], week["id"], "Test", 2.0, "evens", "win")
+        pick, _, _, _ = submit_pick(players[0]["id"], week["id"], "Test", 2.0, "evens", "win")
         submit_pick(players[1]["id"], week["id"], "Test 2", 3.0, "2/1", "win")
         record_result(pick["id"], "win")
 

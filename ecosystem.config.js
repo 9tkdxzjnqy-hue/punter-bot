@@ -9,9 +9,9 @@ module.exports = {
   apps: [
     {
       name: "punter-bridge",
-      script: "index.js",
+      script: "run-with-node20.sh",
       cwd: "./bridge",
-      interpreter: "node",
+      interpreter: "bash",
       // Bridge must start first so Flask can reach it; Flask retries on 503
       instances: 1,
       autorestart: true,

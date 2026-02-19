@@ -708,6 +708,73 @@ def _shadow_banter(sender, sender_phone, body):
         logger.warning("Shadow banter failed: %s", e)
 
 
+@app.route("/test-webhook", methods=["POST"])
+def test_webhook():
+    """
+    Shadow-only endpoint: processes messages through the real pipeline but
+    sends ALL replies to the shadow/test group with LLM forced on.
+    The main group is never contacted.
+    """
+    if not Config.SHADOW_GROUP_ID:
+        return jsonify({"error": "SHADOW_GROUP_ID not configured"}), 400
+
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "no data"}), 400
+
+    sender = data.get("sender", "")
+    sender_phone = data.get("sender_phone", "")
+    body = data.get("body", "")
+    has_media = data.get("has_media", False)
+
+    # Override group_id so the allowed-groups check passes
+    data["group_id"] = Config.GROUP_CHAT_ID or (Config.GROUP_CHAT_IDS[0] if Config.GROUP_CHAT_IDS else "")
+
+    logger.info("[TEST] Message from %s: %s", sender, body[:100])
+
+    original_enabled = Config.LLM_ENABLED
+    Config.LLM_ENABLED = True
+
+    try:
+        reply = None
+        if body.strip().startswith("!"):
+            parsed = parse_message(body, sender, sender_phone)
+            if parsed["type"] == "command":
+                reply = handle_command(parsed)
+            elif parsed["type"] == "result":
+                reply = handle_result(parsed)
+            elif parsed["type"] == "pick":
+                reply = handle_pick(parsed)
+        else:
+            emoji_map = get_emoji_to_player_map()
+            cumulative = parse_cumulative_picks(body, emoji_map)
+            if len(cumulative) >= 1:
+                reply = handle_cumulative_picks(cumulative)
+            else:
+                parsed = parse_message(body, sender, sender_phone)
+                if parsed["type"] == "command":
+                    reply = handle_command(parsed)
+                elif parsed["type"] == "pick":
+                    reply = handle_pick(parsed)
+                elif parsed["type"] == "result":
+                    reply = handle_result(parsed)
+
+        if not reply and (has_media or _looks_like_bet_placed(body)):
+            reply = _handle_placer_bet_confirmation(sender, sender_phone, body)
+
+        if not reply and body.strip():
+            reply = _try_banter(body, sender, sender_phone)
+
+        if reply:
+            shadow_msg = f"[{sender}]: {body}\n\n🤖 LLM: {reply}"
+            send_message(Config.SHADOW_GROUP_ID, shadow_msg)
+            return jsonify({"action": "replied_to_shadow", "reply": reply})
+
+        return jsonify({"action": "no_reply"})
+    finally:
+        Config.LLM_ENABLED = original_enabled
+
+
 def send_message(chat_id, text):
     """Send a message back through the Node.js bridge. Retries on 503 (reconnecting)."""
     import time

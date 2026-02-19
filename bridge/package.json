@@ -4,7 +4,8 @@
   "description": "WhatsApp bridge for Punter Bot",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "postinstall": "node -e \"const fs=require('fs');const f='node_modules/puppeteer-core/lib/cjs/puppeteer/node/BrowserLauncher.js';if(fs.existsSync(f)){let s=fs.readFileSync(f,'utf8');if(s.includes('timeout = 30000')){s=s.replace('timeout = 30000','timeout = 180000');fs.writeFileSync(f,s);console.log('Patched Puppeteer launch timeout to 180s')}else{console.log('Puppeteer timeout already patched or format changed')}}\""
   },
   "dependencies": {
     "dotenv": "^17.3.1",

@@ -1,101 +1,101 @@
 # Punter Bot OCI Deployment Status
 
-*Last updated: 2026-02-18*
+*Last updated: 2026-02-19 (end of night session)*
 
 ## What's Working
 
-- **Flask app** – Runs on port 5001, DB initialized, scheduler OK
+- **Flask app** – Runs on port 5001, DB initialized, scheduler with 5 jobs
 - **Health check** – Running under PM2
-- **Node 20** – Bridge uses nvm's Node 20 via `run-with-node20.sh` (no more optional chaining errors)
-- **Chrome/Chromium** – System Chromium installed; no more missing library errors
+- **Node 20** – Bridge uses nvm's Node 20 via `run-with-node20.sh`
+- **Chrome/Chromium** – System Chromium installed; all library dependencies resolved
 - **Swap** – 1 GB swap configured on OCI VM
-- **QR code** – Displayed in logs and saved to `bridge/qr.png`; HTTP endpoint `/qr` added for viewing
-- **Retry logic** – Bridge retries on timeout/context errors (up to 5 times with 15s delay)
+- **Puppeteer timeout patched** – Changed from 30s to 180s directly in node_modules (works!)
+- **Bridge launches Chrome** – QR code generated and saved to `bridge/qr.png`
+- **QR viewable** – Via SSH tunnel at http://localhost:3000/qr or `scp` download
+- **Retry logic** – Bridge retries on timeout/context errors (up to 5 times)
 
-## Current Blockers
+## Current State
 
-### 1. Chrome Launch Timeout (30 seconds)
+The bridge **starts successfully** and shows a QR code. Chrome launches (the 180s timeout patch works). However, WhatsApp rejected the QR scan with "Can't link new devices at this time. Try again later." This is a WhatsApp rate limit — too many QR codes were generated during the crash loop earlier. This should resolve itself after waiting several hours.
 
-Puppeteer times out after 30 seconds waiting for the WebSocket endpoint. The OCI Always Free VM (1 GB RAM) is slow; Chrome needs more time to start. Our `timeout: 180000` in the bridge config and the Puppeteer patch are not taking effect—whatsapp-web.js appears to use Puppeteer in a way that bypasses our overrides.
+**Flask and health check are currently stopped** (to free RAM). Restart once bridge is linked.
+
+## Remaining Blockers
+
+### 1. WhatsApp QR Rate Limit
+
+WhatsApp says "Can't link new devices at this time." Wait several hours (or until tomorrow) and try again.
 
 ### 2. Git Auth on Server
 
-`git pull` fails with:
-```
-remote: Invalid username or token. Password authentication is not supported for Git operations.
-fatal: Authentication failed for 'https://github.com/9tkdxzjnqy-hue/punter-bot.git/'
-```
+`git pull` fails — GitHub no longer accepts password auth. Need SSH key or Personal Access Token.
 
-GitHub no longer accepts password auth. Need SSH key or Personal Access Token.
+### 3. Puppeteer Timeout Patch is Fragile
 
-### 3. Flask & Health Check Stopped
-
-Stopped to free RAM for bridge testing. Need to restart once bridge is stable.
+The timeout patch is in `node_modules` and will be overwritten by `npm install`. Need a postinstall script or permanent fix.
 
 ---
 
 ## Plan for Tomorrow
 
-### Step 1: Fix Git Auth on Server (~5 min)
+### Step 1: Scan the QR Code (~5 min)
 
-**Option A – SSH (recommended)**
+The rate limit should have cleared overnight.
+
 ```bash
-# On OCI server
-cd ~/punter-bot
-git remote set-url origin git@github.com:9tkdxzjnqy-hue/punter-bot.git
-# Ensure SSH key is added to GitHub (Settings → SSH keys)
-git pull
-```
+# SSH into the server
+ssh -i ~/Documents/Oracle/ssh-key-2026-02-18.key ubuntu@193.123.179.96
 
-**Option B – Personal Access Token**
-- GitHub → Settings → Developer settings → Personal access tokens → Generate new token
-- Use token as password when `git pull` prompts
-
-### Step 2: Fix Puppeteer Timeout (~15–30 min)
-
-**Option A – Patch puppeteer-core on server (quick fix)**
-
-Edit the file directly on the OCI server:
-```bash
-nano ~/punter-bot/bridge/node_modules/puppeteer-core/lib/cjs/puppeteer/node/BrowserLauncher.js
-```
-
-Find line ~76:
-```javascript
-timeout = 30000,
-```
-Change to:
-```javascript
-timeout = 180000,
-```
-
-Save and restart:
-```bash
+# Restart the bridge to get a fresh QR
 pm2 restart punter-bridge
+
+# In a SECOND terminal on your Mac, open SSH tunnel
+ssh -L 3000:localhost:3000 -i ~/Documents/Oracle/ssh-key-2026-02-18.key ubuntu@193.123.179.96
+```
+
+Then open **http://localhost:3000/qr** in your browser. Scan with the punter bot phone (WhatsApp → Linked Devices → Link a Device).
+
+### Step 2: Verify Connection
+
+Watch logs for `"WhatsApp client is ready!"`:
+```bash
 pm2 logs punter-bridge
 ```
-
-*Note: This patch is lost on `npm install`. Re-apply after any `npm install` in bridge, or add a postinstall script.*
-
-**Option B – Upgrade OCI VM**
-- Move from Always Free 1 GB to a paid shape (e.g. 2 GB RAM)
-- Chrome may start fast enough to avoid timeout
-
-**Option C – Run bridge on Mac**
-- Keep Flask on OCI; run bridge locally on Mac
-- Requires exposing bridge to internet or using a tunnel
 
 ### Step 3: Restart Flask & Health Check
 
 ```bash
 pm2 start punter-flask punter-health-check
+pm2 status
 ```
 
 ### Step 4: Test the Bot
 
-1. View QR at http://localhost:3000/qr (via SSH tunnel: `ssh -L 3000:localhost:3000 -i ~/Documents/Oracle/ssh-key-2026-02-18.key ubuntu@193.123.179.96`)
-2. Scan with punter bot phone (WhatsApp → Linked Devices → Link a Device)
-3. Send `!help` in the WhatsApp group
+Send `!help` in the WhatsApp group.
+
+### Step 5: Fix Git Auth on Server
+
+```bash
+# Option A – SSH (recommended)
+cd ~/punter-bot
+git remote set-url origin git@github.com:9tkdxzjnqy-hue/punter-bot.git
+# Generate SSH key on server if needed: ssh-keygen -t ed25519
+# Add public key to GitHub: Settings → SSH keys
+
+# Option B – Personal Access Token
+# GitHub → Settings → Developer settings → Personal access tokens
+# Use token as password when git pull prompts
+```
+
+### Step 6: Make Timeout Patch Permanent
+
+Add a postinstall script in `bridge/package.json`:
+```json
+"scripts": {
+  "start": "node index.js",
+  "postinstall": "sed -i 's/timeout = 30000/timeout = 180000/' node_modules/puppeteer-core/lib/cjs/puppeteer/node/BrowserLauncher.js"
+}
+```
 
 ---
 
@@ -104,11 +104,15 @@ pm2 start punter-flask punter-health-check
 | Item | Path/Command |
 |------|--------------|
 | Project on OCI | `~/punter-bot` |
-| SSH | `ssh -i ~/Documents/Oracle/ssh-key-2026-02-18.key ubuntu@193.123.179.96` |
+| SSH to server | `ssh -i ~/Documents/Oracle/ssh-key-2026-02-18.key ubuntu@193.123.179.96` |
+| SSH tunnel for QR | `ssh -L 3000:localhost:3000 -i ~/Documents/Oracle/ssh-key-2026-02-18.key ubuntu@193.123.179.96` |
 | PM2 config | `ecosystem.config.js` |
 | Bridge | `bridge/index.js` |
+| PM2 restart bridge | `pm2 restart punter-bridge` |
 | PM2 logs | `pm2 logs punter-bridge` |
 | PM2 status | `pm2 status` |
+| View QR (tunnel) | http://localhost:3000/qr |
+| Download QR | `scp -i ~/Documents/Oracle/ssh-key-2026-02-18.key ubuntu@193.123.179.96:~/punter-bot/bridge/qr.png /tmp/qr.png && open /tmp/qr.png` |
 
 ---
 
@@ -116,4 +120,5 @@ pm2 start punter-flask punter-health-check
 
 - OCI instance: Ubuntu 22.04, VM.Standard.E2.1.Micro (1 GB RAM)
 - Region: UK South (London)
-- Bridge uses system Chromium (`/usr/bin/chromium-browser` or `/usr/bin/chromium`)
+- Bridge uses system Chromium
+- Puppeteer timeout patched in node_modules (line ~76 of BrowserLauncher.js: 30000 → 180000)

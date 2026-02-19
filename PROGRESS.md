@@ -62,19 +62,20 @@
 - **urllib3 OpenSSL warning**: macOS system Python 3.9 uses LibreSSL 2.8.3. Harmless warning, can be ignored
 - **Chromium zombie processes**: Killing the bridge with ctrl-C sometimes leaves Chromium running. Use `pkill -f "Chromium.*wwebjs_auth"` before restarting
 
-## Current State
+## Current State (2026-02-19)
 
-- **Both services running**: Flask on :5001, Bridge on :3000
-- **WhatsApp connected**: Bot account authenticated via Linked Devices
-- **Test group**: "Punter test" (120363407272021793@g.us)
-- **Database**: Cleared and ready for live weekend testing
+- **Deployed on OCI**: Ubuntu 22.04 VM, Always Free tier (193.123.179.96)
+- **All services running via PM2**: Bridge on :3000, Flask on :5001, health check
+- **WhatsApp connected**: Bot authenticated and live in main group (447762550958-1423072447@g.us)
+- **SSH access**: `ssh -i ~/Documents/Oracle/ssh-key-2026-02-18.key ubuntu@193.123.179.96`
+- **SSH tunnel for bridge**: `ssh -L 3000:localhost:3000 -i ~/Documents/Oracle/ssh-key-2026-02-18.key ubuntu@193.123.179.96`
 - **Tests**: 73 passing (31 parser + 42 service tests)
 - **Phase 1 complete**: All services wired up, commands working, scheduler initialized
-- **Next**: Live weekend test — copy picks from main group using `Kev: pick text` prefix format
-- **Cumulative format** (2026-02-13): Emoji-based parsing added — copy thread-style messages (`[emoji] [pick]` per line) from main group; all 6 players have emojis configured (Ed 🍋, Kev 🧌, DA 👴🏻, Nug 🍗, Nialler 🔫, Pawn ♟️)
-- **Cumulative replacement** (2026-02-13): Bare team names (e.g. "♟️ Villa") accepted; when player changes pick in thread, new pick detected and stored; last occurrence wins when player appears multiple times
+- **This week**: Ed's pick recorded (Liverpool 3/4). Awaiting picks from Kev, Nialler, Nug, Pawn, DA.
+- **Cumulative format**: Emoji-based parsing — Ed 🍋, Kev 🧌, DA 👴🏻, Nug 🍗, Nialler 🔫, Pawn ♟️
+- **Next**: Complete the outstanding deployment tasks above, then validate a full unattended weekend run
 
-## Phase 0.5: Cloud Migration [IN PROGRESS]
+## Phase 0.5: Cloud Migration [LIVE]
 
 ### PM2 & Reliability (local — done)
 - [x] PM2 ecosystem.config.js for bridge + Flask
@@ -84,11 +85,25 @@
 - [x] Health check alerting (desktop notification on macOS; log file)
 
 ### Oracle Cloud Migration
-- [ ] Sign up Oracle Cloud Always Free (UK South London; Amsterdam fallback)
-- [ ] Provision ARM instance (1 OCPU / 1GB RAM)
-- [ ] Migrate bot to OCI
+- [x] Sign up Oracle Cloud Always Free
+- [x] Provision Ubuntu 22.04 VM (1 OCPU / 1GB RAM)
+- [x] Migrate bot to OCI (bridge, Flask, health check running via PM2)
+- [x] Install system deps for Chromium (libgbm1, libasound2, etc.)
+- [x] Add swap (2GB) to handle Chromium memory on 1GB VM
+- [x] Node 20 via nvm + run-with-node20.sh wrapper for bridge
+- [x] Puppeteer timeout patches (protocolTimeout 5min, launch timeout 3min)
+- [x] QR code endpoint (/qr) + PNG file for headless authentication
+- [x] WhatsApp authenticated and bot live (2026-02-18)
+- [x] First live message sent to main group (2026-02-19)
+- [x] Ed's missed pick (Liverpool 3/4) recorded via webhook
 - [ ] Validate unattended Fri–Mon run
 - [ ] Test remote restart via OCI console
+
+### Outstanding Deployment Tasks
+- [ ] **Fix Git auth on server** — `git pull` fails (GitHub password auth deprecated). Set up SSH key or Personal Access Token on the OCI VM so code can be synced from GitHub.
+- [ ] **Make Puppeteer launch timeout patch permanent** — Current fix is a direct `sed` edit inside `node_modules/puppeteer-core/lib/cjs/puppeteer/node/BrowserLauncher.js` on the server. Will be overwritten by any `npm install`. Add a `postinstall` script in `bridge/package.json` to re-apply automatically.
+- [ ] **Save PM2 state** — Run `pm2 save` on the server so all three processes (bridge, Flask, health check) restart automatically on VM reboot.
+- [ ] **Commit and push local changes** — Multiple modified files locally (bridge/index.js, ecosystem.config.js, .gitignore, etc.) that include all the OCI deployment fixes. Need to commit and push to main.
 
 ## Phase 2: Enhancements [PLANNED]
 

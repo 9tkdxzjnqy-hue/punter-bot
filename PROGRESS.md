@@ -77,12 +77,12 @@
 
 ## Phase 0.5: Cloud Migration [LIVE]
 
-### PM2 & Reliability (local — done)
-- [x] PM2 ecosystem.config.js for bridge + Flask
+### PM2 & Reliability
+- [x] PM2 ecosystem.config.js for bridge + Flask + health check
 - [x] PM2 auto-restart on crash
 - [x] PM2 startup on machine reboot
-- [x] Health check script (pings /health every 5 min)
-- [x] Health check alerting (desktop notification on macOS; log file)
+- [x] Health check script (pings Flask + Bridge /health every 5 min)
+- [x] Telegram alerting via @punteralerts_bot (down + recovery notifications)
 
 ### Oracle Cloud Migration
 - [x] Sign up Oracle Cloud Always Free
@@ -99,11 +99,12 @@
 - [ ] Validate unattended Fri–Mon run
 - [ ] Test remote restart via OCI console
 
-### Outstanding Deployment Tasks
-- [ ] **Fix Git auth on server** — `git pull` fails (GitHub password auth deprecated). Set up SSH key or Personal Access Token on the OCI VM so code can be synced from GitHub.
-- [ ] **Make Puppeteer launch timeout patch permanent** — Current fix is a direct `sed` edit inside `node_modules/puppeteer-core/lib/cjs/puppeteer/node/BrowserLauncher.js` on the server. Will be overwritten by any `npm install`. Add a `postinstall` script in `bridge/package.json` to re-apply automatically.
-- [ ] **Save PM2 state** — Run `pm2 save` on the server so all three processes (bridge, Flask, health check) restart automatically on VM reboot.
-- [ ] **Commit and push local changes** — Multiple modified files locally (bridge/index.js, ecosystem.config.js, .gitignore, etc.) that include all the OCI deployment fixes. Need to commit and push to main.
+### Deployment Hygiene (completed 2026-02-19)
+- [x] **Git auth on server** — SSH key (ed25519) generated on OCI VM, added to GitHub, remote switched to SSH. `git pull` works.
+- [x] **Puppeteer launch timeout patch permanent** — `postinstall` script in `bridge/package.json` auto-patches `puppeteer-core` timeout (30s -> 180s) after any `npm install`.
+- [x] **PM2 state saved** — `pm2 save` run; all three processes auto-restart on VM reboot.
+- [x] **Local changes committed and pushed** — All OCI deployment fixes committed and synced to server.
+- [x] **Telegram alerting** — Health check sends alerts via Telegram bot (@punteralerts_bot) when Flask or Bridge goes down, and recovery notifications when they come back up. Replaces macOS desktop notifications.
 
 ## Phase 2: Enhancements [PLANNED]
 

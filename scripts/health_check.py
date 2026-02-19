@@ -3,8 +3,8 @@
 Health check script for Punter Bot.
 
 Pings the Flask /health and Bridge /health endpoints every 5 minutes.
-On failure, sends a Telegram alert (and macOS desktop notification if local).
-Sends a recovery alert when service comes back up.
+On failure, sends a Telegram alert. Sends a recovery alert when service
+comes back up.
 
 Run standalone: python scripts/health_check.py
 Or via PM2: pm2 start ecosystem.config.js (includes health-check)
@@ -12,7 +12,6 @@ Or via PM2: pm2 start ecosystem.config.js (includes health-check)
 
 import logging
 import os
-import subprocess
 import sys
 import time
 from pathlib import Path
@@ -50,7 +49,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Track previous state to detect recovery
 _previous_status = {"flask": True, "bridge": True}
 
 
@@ -67,24 +65,6 @@ def notify_telegram(message: str) -> None:
         )
     except Exception as e:
         logger.warning("Telegram notification failed: %s", e)
-
-
-def notify_desktop(message: str, title: str = "Punter Bot Health Check") -> None:
-    """Show macOS desktop notification (local dev only)."""
-    if sys.platform != "darwin":
-        return
-    try:
-        subprocess.run(
-            [
-                "osascript",
-                "-e",
-                f'display notification "{message}" with title "{title}"',
-            ],
-            capture_output=True,
-            timeout=5,
-        )
-    except Exception as e:
-        logger.warning("Desktop notification failed: %s", e)
 
 
 def check_endpoint(url: str, name: str) -> bool:
@@ -135,10 +115,9 @@ def main() -> None:
                 consecutive_failures[name] = 0
 
         if alerts:
-            message = "🚨 Punter Bot Alert\n" + "\n".join(alerts)
+            message = "\U0001f6a8 Punter Bot Alert\n" + "\n".join(alerts)
             logger.error(message)
             notify_telegram(message)
-            notify_desktop(", ".join(alerts), "Punter Bot Alert")
 
         time.sleep(INTERVAL_SECONDS)
 

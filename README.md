@@ -64,10 +64,42 @@ The bridge now **auto-cleans** stale Chrome on startup, so `cd bridge && npm sta
 
 Then run `./scripts/start.sh` or start both services manually. The bridge will auto-reconnect on detached Frame when possible; Flask retries up to 3 times if the bridge is reconnecting.
 
-## Production
+## Production (OCI Cloud)
 
-- Set `TEST_MODE=false` in .env
-- Configure `GROUP_CHAT_ID` or `GROUP_CHAT_IDS` for your group(s)
+The bot runs on an Oracle Cloud Always Free Ubuntu 22.04 VM, managed by PM2.
+
+**Server:** `ssh -i ~/Documents/Oracle/ssh-key-2026-02-18.key ubuntu@193.123.179.96`
+
+**SSH tunnel** (to access bridge locally): `ssh -L 3000:localhost:3000 -i ~/Documents/Oracle/ssh-key-2026-02-18.key ubuntu@193.123.179.96`
+
+**PM2 commands (on server):**
+```bash
+pm2 list                    # Status of all processes
+pm2 logs punter-bridge      # Bridge logs
+pm2 logs punter-flask       # Flask logs
+pm2 restart punter-bridge   # Restart bridge
+pm2 restart all             # Restart everything
+```
+
+**Deploying changes:**
+```bash
+# Local: commit and push
+git add . && git commit -m "message" && git push
+
+# Server: pull and restart
+cd ~/punter-bot && git pull && pm2 restart all
+```
+
+**Health check & alerting:**
+- Pings Flask and Bridge `/health` every 5 minutes
+- Sends Telegram alerts via @punteralerts_bot if a service goes down
+- Sends recovery notification when it comes back
+- Config: `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in `.env`
+
+**Key config (.env):**
+- `TEST_MODE=false` for production
+- `GROUP_CHAT_ID` or `GROUP_CHAT_IDS` for your group(s)
+- `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` for health alerts
 - See `MAIN_GROUP_READY.md` for the launch checklist
 
 ## Testing
@@ -81,16 +113,24 @@ python -m pytest tests/ -v
 
 ```
 punter-bot/
-├── bridge/           # Node.js WhatsApp bridge
-│   └── index.js
-├── src/              # Python backend
-│   ├── app.py        # Flask app + webhook routes
-│   ├── config.py     # Environment config
-│   ├── db.py         # Database helpers
-│   ├── schema.sql    # SQLite schema
-│   └── parsers/
-│       └── message_parser.py
+├── bridge/                # Node.js WhatsApp bridge
+│   ├── index.js
+│   ├── package.json
+│   └── run-with-node20.sh # nvm wrapper for OCI server
+├── src/                   # Python backend
+│   ├── app.py             # Flask app + webhook routes
+│   ├── butler.py          # Butler-style message formatting
+│   ├── config.py          # Environment config
+│   ├── db.py              # Database helpers
+│   ├── schema.sql         # SQLite schema
+│   ├── parsers/
+│   │   └── message_parser.py
+│   └── services/          # Business logic (picks, results, stats, etc.)
+├── scripts/
+│   ├── health_check.py    # Health monitor + Telegram alerts
+│   └── restart.sh
 ├── tests/
-├── data/             # SQLite DB (gitignored)
+├── data/                  # SQLite DB (gitignored)
+├── ecosystem.config.js    # PM2 process config
 └── requirements.txt
 ```

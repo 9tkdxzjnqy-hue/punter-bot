@@ -357,12 +357,12 @@ Penalties in Queue:
    - Restarts both on machine reboot
    - Same setup on local machine and Oracle Cloud (Phase 0.5)
 
-2. **Health Check Script with Alerting** (to be built)
-   - Pings bot's `/health` endpoint every 5 minutes
-   - Sends alert if bot is unresponsive
-   - On local machine: desktop notification or log file
-   - On Oracle Cloud: Telegram bot alert (free, works from phone anywhere)
-   - Health check process also managed by PM2
+2. **Health Check Script with Telegram Alerting** (implemented)
+   - Pings both Flask `/health` and Bridge `/health` every 5 minutes
+   - Sends Telegram alert (@punteralerts_bot) if either service goes down
+   - Sends recovery notification when service comes back up
+   - Health check process managed by PM2
+   - Config: `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in `.env`
 
 ---
 
@@ -625,11 +625,14 @@ Saturday 10 AM - Unclear bet slip image
 - âœ… Basic message parsing
 - âœ… Test with group
 
-### Phase 0.5: Cloud Migration
-- Sign up for Oracle Cloud Always Free (London region)
-- Provision ARM instance (1 OCPU / 1GB RAM to start)
-- Migrate bot from local machine to OCI
-- Configure PM2 on cloud server
+### Phase 0.5: Cloud Migration [LIVE]
+- ✅ Signed up Oracle Cloud Always Free
+- ✅ Provisioned Ubuntu 22.04 VM (1 OCPU / 1GB RAM + 2GB swap)
+- ✅ Migrated bot to OCI (bridge, Flask, health check via PM2)
+- ✅ Puppeteer/Chromium stabilised (timeout patches, memory-saving Chrome args)
+- ✅ WhatsApp authenticated via QR code endpoint
+- ✅ Telegram alerting configured (@punteralerts_bot)
+- ✅ Git SSH auth configured on server
 - Validate bot runs unattended Friday–Monday
 - Test remote restart via OCI web console (no laptop needed)
 
@@ -722,7 +725,7 @@ Sports APIs (Phase 3)
 | Risk | Impact | Likelihood | Mitigation |
 |------|--------|------------|------------|
 | Bot crashes Friday night | High | Medium | Manual fallback, Ed override, PM2 auto-restart |
-| Bot unresponsive silently | High | Medium | Health check script with alerting (Telegram on OCI, desktop/log on local) |
+| Bot unresponsive silently | High | Medium | Health check pings Flask + Bridge every 5 min; Telegram alerts on down/recovery |
 | WhatsApp ban/block | High | Low | Use official Business API eventually, proper rate limiting |
 | Missed results | Medium | Medium | Manual entry fallback, Ed confirmation |
 | Wrong penalty calculation | Medium | Low | Ed confirmation before applying, manual override |
@@ -1001,11 +1004,19 @@ Sports APIs (Phase 3)
 - **Phase 0.5:** Cloud Migration phase inserted between Phase 0 and Phase 1
 - **Risks:** Added bot unresponsive silently, Oracle ARM capacity, Oracle account suspension; updated crash mitigation with PM2
 
-**Next Review:** After Phase 0.5 completion
+**Version 0.15** - OCI deployment complete (2026-02-19)
+- **Deployed:** Bot live on OCI Ubuntu 22.04 VM (1 OCPU / 1GB RAM + 2GB swap)
+- **Stability:** Puppeteer timeout patches (protocolTimeout 5min, launch 3min), memory-saving Chrome args, init retry logic
+- **Alerting:** Health check now monitors both Flask and Bridge; sends Telegram alerts (@punteralerts_bot) on down/recovery. macOS desktop notifications removed.
+- **Git auth:** SSH key configured on server; `git pull` works over SSH
+- **Puppeteer patch permanent:** `postinstall` script in `bridge/package.json` auto-patches launch timeout
+- **PM2 state saved:** All processes auto-restart on VM reboot
+
+**Next Review:** After first unattended weekend run
 
 ---
 
 **Document Owner:** You (Primary Admin)
 **Stakeholders:** Ed (Co-admin), The Lads (Users)
-**Last Updated:** 2026-02-17
+**Last Updated:** 2026-02-19
 **Status:** âœ… Requirements Complete - Ready for Development

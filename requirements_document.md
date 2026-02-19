@@ -24,21 +24,21 @@
 - **Nug (Nugget)** - Least engaged player
 - **Technical comfort:** Mixed - bot must be mostly automatic with optional commands
 
-### Formal Addressing Convention
-The bot uses formal butler-style addressing for all players:
+### Player Naming Convention
 
-| Player Nickname | Formal Address |
-|----------------|----------------|
-| Ed | Mr Edmund |
-| Kev | Mr Kevin |
-| DA (Don) | Mr Declan |
-| Nug (Nugget) | Mr Ronan |
-| Nialler | Mr Niall |
-| Pawn | Mr Aidan |
+**Template mode (LLM off):** Uses formal butler-style addressing (Mr Edmund, Mr Kevin, etc.)
 
-**Usage:** The bot uses these formal addresses in all communications (reminders, announcements, results, penalties).
+**LLM mode (LLM on):** Uses player nicknames — varies which one for unpredictability.
 
-**Example:** "Good evening, gentlemen. Currently awaiting selection from Mr Ronan and Mr Aidan."
+| Player | Formal | Nicknames (LLM) |
+|--------|--------|-----------------|
+| Ed | Mr Edmund | Ed, The Hospital Bed, Edmundo, Eddie Mc, Bitter Bitter Ed |
+| Kev | Mr Kevin | Kev Mc, Monster Mc, Caoimh, Barreler |
+| DA (Don) | Mr Declan | DA, Don, Dec, Father |
+| Nug (Nugget) | Mr Ronan | Nugget, Nug, Goldie, Nugent |
+| Nialler | Mr Niall | Nialler, Gun, Scrunnion |
+| Pawn | Mr Aidan | Pawn, the Evil Pawn, MaHogAner, Mawner, Aidean Moghan |
+| Brian (non-player) | — | The Folak Express, Folak |
 
 ### Admin
 - **You** - Primary admin, product manager building the bot
@@ -305,7 +305,17 @@ Penalties in Queue:
 - Helpful without being overbearing
 - Does NOT try to copy group banter (would feel inauthentic)
 
-**Example Communications:**
+#### LLM Personality Mode (Phase 1.5)
+When `LLM_ENABLED=true`, template responses are rewritten by a rotating weekly persona via Groq (llama-3.3-70b-versatile, free tier). Templates are fallback if LLM fails.
+- **Short and sharp** — one sentence ideal, two max. No waffling.
+- **Factual info preserved** — player, pick, odds, result always included
+- **Input parsing unchanged** — LLM only affects output
+- **Personas rotate weekly** — Colonel Slade, Zeke the Mad Prophet, Big Dan, The Silver-Tongued Tempter
+- **Config-driven** — `config/personality.yaml`, no code changes needed
+- **Banter**: responds to Brian (Foley) only when stirring; responds when bot is mentioned directly; no random banter
+- **Shadow testing**: `SHADOW_GROUP_ID` mirrors main group messages to test group with LLM on; `/test-webhook` for safe simulation
+
+**Example Template Communications:**
 
 **Reminder:**
 > "Good evening, gentlemen. May I remind you that picks are due by 10 PM Friday. Currently awaiting selection from Mr Ronan and Mr Aidan."
@@ -1012,7 +1022,19 @@ Sports APIs (Phase 3)
 - **Puppeteer patch permanent:** `postinstall` script in `bridge/package.json` auto-patches launch timeout
 - **PM2 state saved:** All processes auto-restart on VM reboot
 
-**Next Review:** After first unattended weekend run
+**Version 0.16** - LLM personality & shadow testing (2026-02-17)
+- **LLM integration**: Groq API (llama-3.3-70b-versatile, free tier) rewrites bot responses with rotating weekly persona
+- **Personas**: Colonel Slade, Zeke the Mad Prophet, Big Dan, The Silver-Tongued Tempter — rotate on new week
+- **Player nicknames**: Replaced "Mr X" convention for LLM mode — each player has multiple nicknames the bot varies between
+- **Brian (Foley)**: Non-player profile added — bot responds only when he's being provocative (keyword detection)
+- **Banter rules**: No random banter; bot only speaks when mentioned directly or Brian is stirring
+- **Response style**: Short and sharp — 1 sentence ideal, 2 max, max_tokens=80
+- **Shadow mode**: `SHADOW_GROUP_ID` mirrors main group to test group with LLM on; main group stays on templates
+- **Test endpoint**: `/test-webhook` processes picks/results/chat safely in test group only (main group never contacted)
+- **Config-driven**: All personality in `config/personality.yaml`, no code changes needed
+- **Feature flag**: `LLM_ENABLED` in `.env` — currently off for main group
+
+**Next Review:** After shadow testing weekend review
 
 ---
 

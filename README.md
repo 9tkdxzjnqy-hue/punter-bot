@@ -100,7 +100,23 @@ cd ~/punter-bot && git pull && pm2 restart all
 - `TEST_MODE=false` for production
 - `GROUP_CHAT_ID` or `GROUP_CHAT_IDS` for your group(s)
 - `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` for health alerts
+- `LLM_ENABLED=false` — set to `true` to activate LLM personality
+- `GROQ_API_KEY` — Groq API key (free tier)
+- `SHADOW_GROUP_ID` — test group ID for shadow mode (LLM preview without affecting main group)
 - See `MAIN_GROUP_READY.md` for the launch checklist
+
+## LLM Personality
+
+The bot can rewrite its template responses with a rotating weekly persona via Groq's free API. All config lives in `config/personality.yaml`.
+
+**Shadow testing:** Set `SHADOW_GROUP_ID` in `.env`. Main group gets templates; test group gets LLM-enhanced versions of every message. Use `/test-webhook` to simulate picks/results/chat safely (only sends to test group).
+
+```bash
+# Simulate a message in the test group only
+curl -X POST http://localhost:5001/test-webhook \
+  -H 'Content-Type: application/json' \
+  -d '{"sender": "Brian", "body": "Ed is going to lose again", "has_media": false}'
+```
 
 ## Testing
 
@@ -117,9 +133,12 @@ punter-bot/
 │   ├── index.js
 │   ├── package.json
 │   └── run-with-node20.sh # nvm wrapper for OCI server
+├── config/
+│   └── personality.yaml   # LLM persona config (nicknames, scenarios, personas)
 ├── src/                   # Python backend
-│   ├── app.py             # Flask app + webhook routes
-│   ├── butler.py          # Butler-style message formatting
+│   ├── app.py             # Flask app + webhook routes + shadow mode
+│   ├── butler.py          # Message formatting (LLM-enhanced with template fallback)
+│   ├── llm_client.py      # Groq API wrapper + persona management
 │   ├── config.py          # Environment config
 │   ├── db.py              # Database helpers
 │   ├── schema.sql         # SQLite schema

@@ -62,7 +62,7 @@
 - **urllib3 OpenSSL warning**: macOS system Python 3.9 uses LibreSSL 2.8.3. Harmless warning, can be ignored
 - **Chromium zombie processes**: Killing the bridge with ctrl-C sometimes leaves Chromium running. Use `pkill -f "Chromium.*wwebjs_auth"` before restarting
 
-## Current State (2026-02-19)
+## Current State (2026-02-17)
 
 - **Deployed on OCI**: Ubuntu 22.04 VM, Always Free tier (193.123.179.96)
 - **All services running via PM2**: Bridge on :3000, Flask on :5001, health check
@@ -71,9 +71,10 @@
 - **SSH tunnel for bridge**: `ssh -L 3000:localhost:3000 -i ~/Documents/Oracle/ssh-key-2026-02-18.key ubuntu@193.123.179.96`
 - **Tests**: 73 passing (31 parser + 42 service tests)
 - **Phase 1 complete**: All services wired up, commands working, scheduler initialized
-- **This week**: Ed's pick recorded (Liverpool 3/4). Awaiting picks from Kev, Nialler, Nug, Pawn, DA.
+- **LLM personality**: Deployed in shadow mode — main group uses templates, test group receives LLM-enhanced versions
+- **Active persona**: Colonel Slade (rotates on next new week)
 - **Cumulative format**: Emoji-based parsing — Ed 🍋, Kev 🧌, DA 👴🏻, Nug 🍗, Nialler 🔫, Pawn ♟️
-- **Next**: Complete the outstanding deployment tasks above, then validate a full unattended weekend run
+- **Next**: Monitor shadow mode over the weekend, review LLM quality, tune if needed, then enable on main group
 
 ## Phase 0.5: Cloud Migration [LIVE]
 
@@ -106,14 +107,52 @@
 - [x] **Local changes committed and pushed** — All OCI deployment fixes committed and synced to server.
 - [x] **Telegram alerting** — Health check sends alerts via Telegram bot (@punteralerts_bot) when Flask or Bridge goes down, and recovery notifications when they come back up. Replaces macOS desktop notifications.
 
+## Phase 1.5: LLM Personality [LIVE — Shadow Testing]
+
+### Architecture
+- [x] Groq API integration (llama-3.3-70b-versatile, free tier)
+- [x] `src/llm_client.py` — API wrapper with persona management
+- [x] `config/personality.yaml` — all personality config in one YAML file, no code changes needed
+- [x] `src/butler.py` — LLM enhances output; template fallback if LLM fails
+- [x] Feature flag: `LLM_ENABLED` in `.env` (off for main group)
+
+### Personas (rotate weekly)
+- [x] Colonel Slade — fierce military motivator
+- [x] Zeke the Mad Prophet — unhinged cosmic shaman
+- [x] Big Dan — folksy Southern storyteller
+- [x] The Silver-Tongued Tempter — suave philosophical devil
+- [x] Persona rotates on new week creation
+
+### Player Nicknames (replaces "Mr X" convention for LLM)
+- [x] Ed: Ed, The Hospital Bed, Edmundo, Eddie Mc, Bitter Bitter Ed
+- [x] Kev: Kev Mc, Monster Mc, Caoimh, Barreler
+- [x] Ronan: Nugget, Nug, Goldie, Nugent
+- [x] Niall: Nialler, Gun, Scrunnion
+- [x] Aidan: Pawn, the Evil Pawn, MaHogAner, Mawner, Aidean Moghan
+- [x] Declan: DA, Don, Dec, Father
+- [x] Brian (non-player): The Folak Express, Folak
+
+### Banter Rules
+- [x] Bot responds to Brian only when he's stirring (provocative keyword detection)
+- [x] Bot responds when directly mentioned ("butler", "bot", "betting butler")
+- [x] No random banter on general chat — removed banter_rate
+- [x] Responses are sharp: 1 sentence ideal, 2 max, max_tokens=80
+
+### Shadow Testing Mode
+- [x] `SHADOW_GROUP_ID` in `.env` — test group receives LLM-enhanced versions
+- [x] Main group gets safe template responses (LLM off)
+- [x] Shadow mode mirrors: original message + LLM response to test group
+- [x] `/test-webhook` endpoint — processes picks/results/banter safely in test group only
+- [ ] Validate shadow mode over the weekend with real messages
+- [ ] Review LLM output quality and tune personality config
+- [ ] Enable LLM on main group once satisfied
+
 ## Phase 2: Enhancements [PLANNED]
 
 ### Bet Slip & Other
 - [ ] Bet slip image reading (OCR)
 - [ ] Rotation queue visibility
-- [ ] Leaderboard
 - [ ] Monday recap
-- [ ] Polish butler personality
 
 ## Phase 3: Intelligence [PLANNED]
 

@@ -47,15 +47,20 @@ const client = new Client({
   authStrategy: new LocalAuth(),
   puppeteer: {
     headless: true,
-    protocolTimeout: 120000, // 2 min — slow VMs (e.g. OCI) need more time for WhatsApp Web init
+    protocolTimeout: 300000, // 5 min — OCI Always Free VM is slow; WhatsApp Web init needs time
     ...(executablePath && { executablePath }),
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage", // Avoid /dev/shm issues in limited environments
+      "--disable-dev-shm-usage",
       "--disable-gpu",
       "--disable-software-rasterizer",
-      "--disable-features=site-per-process", // Reduces detached Frame errors
+      "--disable-features=site-per-process",
+      "--disable-extensions",
+      "--disable-background-networking",
+      "--disable-sync",
+      "--mute-audio",
+      "--no-first-run",
     ],
   },
 });

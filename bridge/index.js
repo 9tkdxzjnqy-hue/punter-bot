@@ -317,6 +317,31 @@ app.listen(BRIDGE_PORT, () => {
   console.log(`Bridge HTTP server listening on port ${BRIDGE_PORT}`);
 });
 
+// Retry init on "Execution context destroyed" / navigation race (common on slow VMs)
+const MAX_INIT_RETRIES = 5;
+const INIT_RETRY_DELAY_MS = 15000;
+
+async function initWithRetry(attempt = 1) {
+  try {
+    await client.initialize();
+  } catch (err) {
+    const msg = err.message || "";
+    const isRetryable =
+      msg.includes("Execution context was destroyed") ||
+      msg.includes("Protocol error") ||
+      msg.includes("ProtocolError");
+    if (isRetryable && attempt < MAX_INIT_RETRIES) {
+      console.log(`Init failed (attempt ${attempt}/${MAX_INIT_RETRIES}), retrying in ${INIT_RETRY_DELAY_MS / 1000}s...`);
+      try {
+        await client.destroy();
+      } catch (_) {}
+      await new Promise((r) => setTimeout(r, INIT_RETRY_DELAY_MS));
+      return initWithRetry(attempt + 1);
+    }
+    throw err;
+  }
+}
+
 console.log("Initializing WhatsApp client...");
 killStaleChrome();
-client.initialize();
+initWithRetry();

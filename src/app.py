@@ -763,7 +763,13 @@ def test_webhook():
             reply = _handle_placer_bet_confirmation(sender, sender_phone, body)
 
         if not reply and body.strip():
-            reply = _try_banter(body, sender, sender_phone)
+            player = lookup_player(sender_phone=sender_phone, sender_name=sender)
+            player_name = _first_name_from_player(player) if player else sender
+            context = (
+                f'{sender} said in the group chat: "{body}"\n\n'
+                f"Respond in character. One sharp sentence."
+            )
+            reply = llm_client.generate(context, player_name=player_name)
 
         if reply:
             shadow_msg = f"[{sender}]: {body}\n\n🤖 LLM: {reply}"

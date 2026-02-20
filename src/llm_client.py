@@ -6,6 +6,7 @@ Thin wrapper around the Groq API. Returns enhanced text or None
 """
 
 import logging
+import random
 from pathlib import Path
 
 import requests

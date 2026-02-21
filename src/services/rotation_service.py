@@ -124,11 +124,16 @@ def get_rotation_display():
 
 
 def _build_queue(next_placer):
-    """Build the full rotation queue starting from the next placer."""
+    """
+    Build the full rotation queue.
+
+    Always lists every player once in standard rotation order.
+    Penalty entries are inserted immediately before the player's
+    standard slot, so a player with a penalty appears twice (or more).
+    """
     players = get_rotation_order()
     conn = get_db()
 
-    # Get unprocessed penalty queue entries
     penalty_entries = conn.execute(
         "SELECT rq.*, pl.formal_name FROM rotation_queue rq "
         "JOIN players pl ON rq.player_id = pl.id "
@@ -136,45 +141,42 @@ def _build_queue(next_placer):
     ).fetchall()
     conn.close()
 
-    queue = []
-
-    # Add penalty queue entries first
-    for entry in penalty_entries:
-        player = get_player_by_id(entry["player_id"])
-        queue.append({
-            "formal_name": player["formal_name"],
-            "reason": entry["reason"],
-        })
-
-    # Add standard rotation (starting from next regular player)
     if not next_placer:
-        return queue
+        return []
+
+    # Group penalty entries by player_id
+    penalties_by_player = {}
+    for entry in penalty_entries:
+        pid = entry["player_id"]
+        if pid not in penalties_by_player:
+            penalties_by_player[pid] = []
+        penalties_by_player[pid].append(entry["reason"])
 
     # Find start index in standard rotation
     start_idx = 0
-    # If there are penalty entries, standard rotation starts after them
-    if penalty_entries:
-        # Find where standard rotation picks up
-        last_placer_ids = {e["player_id"] for e in penalty_entries}
-        for i, p in enumerate(players):
-            if p["id"] == next_placer["id"] and p["id"] not in last_placer_ids:
-                start_idx = i
-                break
-    else:
-        for i, p in enumerate(players):
-            if p["id"] == next_placer["id"]:
-                start_idx = i
-                break
+    for i, p in enumerate(players):
+        if p["id"] == next_placer["id"]:
+            start_idx = i
+            break
 
-    # Build standard rotation order
-    penalty_player_ids = {e["player_id"] for e in penalty_entries}
+    queue = []
     for offset in range(len(players)):
         idx = (start_idx + offset) % len(players)
         player = players[idx]
-        if player["id"] not in penalty_player_ids:
+
+        # Insert penalty turns before the player's standard turn
+        for reason in penalties_by_player.get(player["id"], []):
             queue.append({
                 "formal_name": player["formal_name"],
-                "reason": None,
+                "emoji": player.get("emoji", ""),
+                "reason": reason,
             })
+
+        # Standard turn
+        queue.append({
+            "formal_name": player["formal_name"],
+            "emoji": player.get("emoji", ""),
+            "reason": None,
+        })
 
     return queue

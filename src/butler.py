@@ -94,7 +94,7 @@ def picks_status(submitted, missing):
     """Show who has and hasn't submitted picks."""
     if not missing:
         return ""
-    missing_names = [p["formal_name"] for p in missing]
+    missing_names = [_emoji_name(p) for p in missing]
     return f"Awaiting selection from {_join_names(missing_names)}."
 
 
@@ -309,15 +309,21 @@ def rotation_display(next_placer, queue, last_placer=None, last_week=None):
     ]
 
     if last_placer and last_week:
-        lines.append(f"Last Placed: {last_placer['formal_name']} (Week {last_week})")
+        lp_emoji = _primary_emoji(last_placer.get("emoji", ""))
+        lp_prefix = f"{lp_emoji} " if lp_emoji else ""
+        lines.append(f"Last Placed: {lp_prefix}{last_placer['formal_name']} (Week {last_week})")
 
-    lines.append(f"Next Up: {next_placer['formal_name']} \U0001f448")
+    np_emoji = _primary_emoji(next_placer.get("emoji", ""))
+    np_prefix = f"{np_emoji} " if np_emoji else ""
+    lines.append(f"Next Up: {np_prefix}{next_placer['formal_name']} \U0001f448")
     lines.append("")
     lines.append("Queue:")
 
     for i, entry in enumerate(queue, 1):
+        emoji = _primary_emoji(entry.get("emoji", ""))
+        prefix = f"{emoji} " if emoji else ""
         suffix = f" (penalty \u2014 {entry['reason']})" if entry.get("reason") else ""
-        lines.append(f"{i}. {entry['formal_name']}{suffix}")
+        lines.append(f"{i}. {prefix}{entry['formal_name']}{suffix}")
 
     return "\n".join(lines)
 
@@ -412,6 +418,13 @@ def _primary_emoji(emoji_str):
     if not emoji_str:
         return ""
     return emoji_str.split(",")[0].strip()
+
+
+def _emoji_name(player):
+    """Format as 'emoji Mr Name' e.g. '🍋 Mr Edmund'."""
+    emoji = _primary_emoji(player.get("emoji", ""))
+    prefix = f"{emoji} " if emoji else ""
+    return f"{prefix}{player['formal_name']}"
 
 
 def help_text():

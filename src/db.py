@@ -49,6 +49,7 @@ def _migrate_weeks_group_id(conn):
         return
 
     conn.executescript("""
+        PRAGMA foreign_keys = OFF;
         DROP TABLE IF EXISTS weeks_new;
         CREATE TABLE weeks_new (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -68,6 +69,7 @@ def _migrate_weeks_group_id(conn):
         FROM weeks;
         DROP TABLE weeks;
         ALTER TABLE weeks_new RENAME TO weeks;
+        PRAGMA foreign_keys = ON;
     """)
     conn.commit()
 

@@ -138,5 +138,5 @@ Reference for MVP testing. Update status as flows are confirmed.
 ## Version
 
 - **Document:** Testing plan v0.12
-- **Requirements:** See `requirements_document.md` (Version 0.21)
+- **Requirements:** See `RULES.md`
 - **Last updated:** 2026-02-25

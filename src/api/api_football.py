@@ -161,18 +161,32 @@ def get_fixture_by_id(fixture_id):
 
 # Key league IDs for common competitions
 LEAGUE_IDS = {
+    # England
     "Premier League": 39,
+    "Championship": 40,
+    "League One": 41,
+    "League Two": 42,
+    "FA Cup": 45,
+    "League Cup": 48,
+    "Community Shield": 528,
+    # Europe
     "La Liga": 140,
     "Serie A": 135,
     "Bundesliga": 78,
     "Ligue 1": 61,
     "Champions League": 2,
     "Europa League": 3,
-    "FA Cup": 45,
-    "League Cup": 48,
-    "Championship": 40,
+    "Conference League": 848,
+    # Other
     "Scottish Premiership": 179,
 }
 
 # Priority leagues to fetch (covers most picks from the lads)
-PRIORITY_LEAGUES = [39, 140, 135, 78, 61, 2, 3, 179]
+PRIORITY_LEAGUES = [
+    # England — all leagues + cups
+    39, 40, 41, 42, 45, 48,
+    # Europe — top 4 leagues + European competitions
+    140, 135, 78, 61, 2, 3, 848,
+    # Scotland
+    179,
+]

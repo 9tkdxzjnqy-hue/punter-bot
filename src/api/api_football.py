@@ -10,7 +10,7 @@ Docs: https://www.api-football.com/documentation-v3
 import json
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, date
 from pathlib import Path
 
 import requests
@@ -106,6 +106,17 @@ def _get(endpoint, params, cache_ttl_hours=6):
         return None
 
 
+def _football_season_year():
+    """Return the season start year for the current European football season.
+
+    European football seasons run Aug–May. A date in Jan–Jul belongs to the
+    season that started the previous August (e.g. Feb 2026 → 2025-26 season → 2025).
+    A date in Aug–Dec belongs to the season starting that year.
+    """
+    today = date.today()
+    return today.year if today.month >= 8 else today.year - 1
+
+
 def get_fixtures_by_date(date_str):
     """
     Fetch fixtures for a specific date.
@@ -137,7 +148,7 @@ def get_fixtures_by_date_range(start_date, end_date, league_id=None):
     params = {"from": start_date, "to": end_date}
     if league_id:
         params["league"] = str(league_id)
-        params["season"] = str(datetime.now().year)
+        params["season"] = str(_football_season_year())
 
     data = _get("/fixtures", params, cache_ttl_hours=6)
     if not data:

@@ -29,6 +29,26 @@ PICK_ABBREVIATIONS = {
 }
 
 
+def _frame(template, context, scenario=None, player_name=None):
+    """
+    Wrap template content with LLM opening/closing lines via get_framing().
+
+    This is the live architecture: the LLM adds butler-voiced framing around
+    structured template content, but never rewrites the content itself.
+    Returns the template unchanged if LLM is disabled or fails.
+    """
+    framing = llm_client.get_framing(context, scenario=scenario, player_name=player_name)
+    opening = framing.get("opening", "").strip()
+    closing = framing.get("closing", "").strip()
+    parts = []
+    if opening:
+        parts.append(opening)
+    parts.append(template)
+    if closing:
+        parts.append(closing)
+    return "\n\n".join(parts) if len(parts) > 1 else template
+
+
 def _formalize_pick(description):
     """Convert abbreviated pick text to formal display format."""
     if not description or not isinstance(description, str):

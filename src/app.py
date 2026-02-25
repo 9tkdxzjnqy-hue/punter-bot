@@ -672,33 +672,26 @@ def _first_name_from_player(player):
 
 def _shadow_message(sender, body, template_reply, source_group_id):
     """
-    Send an LLM-enhanced version of a bot reply to the shadow group.
-    Shows what the sender said, the template reply, and the LLM version.
+    Send the framed (LLM opening/closing + template) version to the shadow group.
+    This shows exactly what would go live if LLM framing is enabled.
     """
     try:
         # Temporarily force LLM on for the shadow call
         original_enabled = Config.LLM_ENABLED
         Config.LLM_ENABLED = True
 
-        # Re-derive the LLM context from the template reply
-        context = (
-            f"The bot just sent this template response to the group:\n"
-            f'"{template_reply}"\n\n'
-            f"Rewrite this response in your character's voice. Keep the same factual "
-            f"information but make it entertaining. 1-3 sentences."
-        )
         player = lookup_player(sender_name=sender)
         player_name = _first_name_from_player(player) if player else sender
 
-        enhanced = llm_client.generate(context, player_name=player_name)
+        context = f'Bot replied to {sender}: "{template_reply}"'
+        framed = butler._frame(template_reply, context, player_name=player_name)
         Config.LLM_ENABLED = original_enabled
 
-        if enhanced:
-            shadow_msg = f"[{sender}]: {body}\n\n🤖 LLM: {enhanced}"
-            send_message(Config.SHADOW_GROUP_ID, shadow_msg)
+        if framed != template_reply:
+            shadow_msg = f"[{sender}]: {body}\n\n🤖 Framed:\n{framed}"
         else:
-            shadow_msg = f"[{sender}]: {body}\n\n📋 Template: {template_reply}"
-            send_message(Config.SHADOW_GROUP_ID, shadow_msg)
+            shadow_msg = f"[{sender}]: {body}\n\n📋 Template (framing failed):\n{template_reply}"
+        send_message(Config.SHADOW_GROUP_ID, shadow_msg)
     except Exception as e:
         logger.warning("Shadow message failed: %s", e)
 

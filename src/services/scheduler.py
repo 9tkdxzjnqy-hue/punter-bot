@@ -347,7 +347,7 @@ def _job_close_week():
 
 
 def _job_fetch_fixtures():
-    """Daily 7:30PM (Wed-Sun): Fetch today/tomorrow fixtures from API-Football."""
+    """Daily 7:30PM (Wed-Sun): Fetch today/tomorrow fixtures for all configured sports."""
     try:
         from src.services.fixture_service import fetch_weekend_fixtures
         count = fetch_weekend_fixtures()

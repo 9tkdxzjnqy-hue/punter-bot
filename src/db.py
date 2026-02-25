@@ -36,6 +36,7 @@ def _run_migrations(conn):
     _migrate_weeks_group_id(conn)
     _migrate_picks_enrichment(conn)
     _migrate_fixture_events(conn)
+    _migrate_team_aliases_sport(conn)
 
 
 def _column_exists(conn, table, column):
@@ -111,13 +112,38 @@ def _migrate_fixture_events(conn):
     conn.commit()
 
 
+def _migrate_team_aliases_sport(conn):
+    """Add sport column to team_aliases table and update UNIQUE constraint."""
+    if _column_exists(conn, "team_aliases", "sport"):
+        return
+
+    conn.executescript("""
+        PRAGMA foreign_keys = OFF;
+        DROP TABLE IF EXISTS team_aliases_new;
+        CREATE TABLE team_aliases_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            alias TEXT NOT NULL COLLATE NOCASE,
+            canonical_name TEXT NOT NULL,
+            sport TEXT NOT NULL DEFAULT 'football',
+            UNIQUE(alias, sport)
+        );
+        INSERT INTO team_aliases_new (id, alias, canonical_name, sport)
+        SELECT id, alias, canonical_name, 'football' FROM team_aliases;
+        DROP TABLE team_aliases;
+        ALTER TABLE team_aliases_new RENAME TO team_aliases;
+        PRAGMA foreign_keys = ON;
+    """)
+    conn.commit()
+
+
 def seed_team_aliases(conn):
     """Seed team aliases if the table is empty. Covers common abbreviations."""
     count = conn.execute("SELECT COUNT(*) FROM team_aliases").fetchone()[0]
     if count > 0:
         return
 
-    aliases = [
+    # Football aliases (alias, canonical_name, sport)
+    football_aliases = [
         # Premier League
         ("leics", "Leicester City"),
         ("leicester", "Leicester City"),
@@ -170,9 +196,63 @@ def seed_team_aliases(conn):
         ("rangers", "Rangers"),
     ]
 
+    # Rugby aliases
+    rugby_aliases = [
+        # Irish Provinces (URC)
+        ("munster", "Munster Rugby"),
+        ("leinster", "Leinster Rugby"),
+        ("ulster", "Ulster Rugby"),
+        ("connacht", "Connacht Rugby"),
+        # Six Nations
+        ("ireland", "Ireland"),
+        ("scotland", "Scotland"),
+        ("wales", "Wales"),
+        ("france", "France"),
+        ("italy", "Italy"),
+        ("england", "England"),
+        # Other
+        ("all blacks", "New Zealand"),
+        ("springboks", "South Africa"),
+        ("wallabies", "Australia"),
+        ("saracens", "Saracens"),
+        ("bath", "Bath Rugby"),
+        ("northampton", "Northampton Saints"),
+        ("saints", "Northampton Saints"),
+    ]
+
+    # NFL aliases
+    nfl_aliases = [
+        ("kc", "Kansas City Chiefs"),
+        ("philly", "Philadelphia Eagles"),
+        ("sf", "San Francisco 49ers"),
+        ("gb", "Green Bay Packers"),
+        ("ne", "New England Patriots"),
+        ("tb", "Tampa Bay Buccaneers"),
+        ("la rams", "Los Angeles Rams"),
+        ("la chargers", "Los Angeles Chargers"),
+    ]
+
+    # NBA aliases
+    nba_aliases = [
+        ("sixers", "Philadelphia 76ers"),
+        ("cavs", "Cleveland Cavaliers"),
+        ("mavs", "Dallas Mavericks"),
+        ("wolves", "Minnesota Timberwolves"),
+    ]
+
+    rows = []
+    for alias, canonical in football_aliases:
+        rows.append((alias, canonical, "football"))
+    for alias, canonical in rugby_aliases:
+        rows.append((alias, canonical, "rugby"))
+    for alias, canonical in nfl_aliases:
+        rows.append((alias, canonical, "nfl"))
+    for alias, canonical in nba_aliases:
+        rows.append((alias, canonical, "nba"))
+
     conn.executemany(
-        "INSERT OR IGNORE INTO team_aliases (alias, canonical_name) VALUES (?, ?)",
-        aliases,
+        "INSERT OR IGNORE INTO team_aliases (alias, canonical_name, sport) VALUES (?, ?, ?)",
+        rows,
     )
     conn.commit()
 

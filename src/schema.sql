@@ -101,8 +101,10 @@ CREATE TABLE IF NOT EXISTS fixtures (
 
 CREATE TABLE IF NOT EXISTS team_aliases (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    alias TEXT NOT NULL UNIQUE COLLATE NOCASE,
-    canonical_name TEXT NOT NULL
+    alias TEXT NOT NULL COLLATE NOCASE,
+    canonical_name TEXT NOT NULL,
+    sport TEXT NOT NULL DEFAULT 'football',
+    UNIQUE(alias, sport)
 );
 
 CREATE TABLE IF NOT EXISTS bet_slips (

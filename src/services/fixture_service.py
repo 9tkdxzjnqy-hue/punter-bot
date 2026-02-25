@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 def fetch_weekend_fixtures():
     """
-    Fetch fixtures for tomorrow (and today if not cached).
+    Fetch fixtures for tomorrow (and today if not cached) across all configured sports.
 
     The API-Football free plan only allows access to today ± 1 day, so we
     fetch daily instead of pre-fetching the whole weekend. The scheduler
@@ -41,10 +41,15 @@ def fetch_weekend_fixtures():
     tomorrow = today + timedelta(days=1)
 
     total_cached = 0
+
+    # Football — uses existing api_football.py
     for target_date in [today, tomorrow]:
         date_str = target_date.isoformat()
         cached = _fetch_fixtures_for_date(date_str)
         total_cached += cached
+
+    # Other sports — uses generic api_sports.py
+    total_cached += _fetch_non_football_fixtures(today, tomorrow)
 
     logger.info("Daily fixture fetch: %d fixtures cached (today + tomorrow)", total_cached)
 
@@ -62,6 +67,43 @@ def fetch_weekend_fixtures():
             logger.warning("Re-enrichment failed (non-blocking): %s", e)
 
     return total_cached
+
+
+def _fetch_non_football_fixtures(today, tomorrow):
+    """
+    Fetch fixtures for all configured non-football sports.
+
+    Returns:
+        int — total number of fixtures cached.
+    """
+    try:
+        from src.api.api_sports import get_configured_sports, get_fixtures, normalize_fixture
+    except ImportError:
+        return 0
+
+    total = 0
+    for sport in get_configured_sports():
+        try:
+            for target_date in [today, tomorrow]:
+                date_str = target_date.isoformat()
+                raw_fixtures = get_fixtures(sport, date_str)
+                if not raw_fixtures:
+                    continue
+
+                normalized = []
+                for raw in raw_fixtures:
+                    norm = normalize_fixture(sport, raw)
+                    if norm:
+                        normalized.append(norm)
+
+                if normalized:
+                    cached = cache_normalized_fixtures(normalized)
+                    total += cached
+                    logger.info("Cached %d %s fixtures for %s", cached, sport, date_str)
+        except Exception as e:
+            logger.warning("Failed to fetch %s fixtures (non-blocking): %s", sport, e)
+
+    return total
 
 
 def _fetch_fixtures_for_date(date_str):
@@ -96,7 +138,7 @@ def _fetch_fixtures_for_date(date_str):
     return 0
 
 
-def _cache_fixtures(api_fixtures):
+def _cache_fixtures(api_fixtures, sport="football"):
     """
     Store API-Football fixtures in the local database.
 
@@ -104,6 +146,7 @@ def _cache_fixtures(api_fixtures):
 
     Args:
         api_fixtures: List of fixture dicts from API-Football response.
+        sport: Sport name (default "football").
 
     Returns:
         int — number of fixtures stored.
@@ -137,7 +180,7 @@ def _cache_fixtures(api_fixtures):
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     api_id,
-                    "football",
+                    sport,
                     league.get("name", "Unknown"),
                     league.get("id"),
                     teams.get("home", {}).get("name", "Unknown"),
@@ -161,9 +204,62 @@ def _cache_fixtures(api_fixtures):
     return count
 
 
-def get_upcoming_fixtures(days_ahead=4):
+def cache_normalized_fixtures(normalized_fixtures):
+    """
+    Store pre-normalized fixtures (from api_sports.py) in the local database.
+
+    Args:
+        normalized_fixtures: List of normalized fixture dicts with standard keys.
+
+    Returns:
+        int — number of fixtures stored.
+    """
+    conn = get_db()
+    count = 0
+
+    for f in normalized_fixtures:
+        try:
+            api_id = f.get("api_id")
+            if not api_id:
+                continue
+
+            conn.execute(
+                """INSERT OR REPLACE INTO fixtures
+                   (api_id, sport, competition, competition_id,
+                    home_team, away_team, kickoff, status,
+                    home_score, away_score, fetched_at, raw_json)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    api_id,
+                    f.get("sport", "unknown"),
+                    f.get("competition", "Unknown"),
+                    f.get("competition_id"),
+                    f.get("home_team", "Unknown"),
+                    f.get("away_team", "Unknown"),
+                    f.get("kickoff", ""),
+                    f.get("status", "NS"),
+                    f.get("home_score"),
+                    f.get("away_score"),
+                    datetime.utcnow().isoformat(),
+                    f.get("raw_json", "{}"),
+                ),
+            )
+            count += 1
+        except Exception as e:
+            logger.warning("Failed to cache %s fixture: %s", f.get("sport"), e)
+
+    conn.commit()
+    conn.close()
+    return count
+
+
+def get_upcoming_fixtures(days_ahead=4, sport=None):
     """
     Get cached fixtures that haven't started yet, within the next N days.
+
+    Args:
+        days_ahead: How many days ahead to look.
+        sport: Optional sport filter (e.g. "football", "rugby"). None = all sports.
 
     Returns:
         list of fixture dicts from the local database.
@@ -173,11 +269,18 @@ def get_upcoming_fixtures(days_ahead=4):
     cutoff = (now + timedelta(days=days_ahead)).isoformat()
 
     conn = get_db()
-    fixtures = conn.execute(
-        "SELECT * FROM fixtures WHERE kickoff > ? AND kickoff < ? "
-        "AND status IN ('NS', 'TBD') ORDER BY kickoff",
-        (now.isoformat(), cutoff),
-    ).fetchall()
+    if sport:
+        fixtures = conn.execute(
+            "SELECT * FROM fixtures WHERE kickoff > ? AND kickoff < ? "
+            "AND status IN ('NS', 'TBD') AND sport = ? ORDER BY kickoff",
+            (now.isoformat(), cutoff, sport),
+        ).fetchall()
+    else:
+        fixtures = conn.execute(
+            "SELECT * FROM fixtures WHERE kickoff > ? AND kickoff < ? "
+            "AND status IN ('NS', 'TBD') ORDER BY kickoff",
+            (now.isoformat(), cutoff),
+        ).fetchall()
     conn.close()
     return [dict(f) for f in fixtures]
 

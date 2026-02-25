@@ -1,7 +1,7 @@
 import os
 
 from src.parsers.message_parser import (
-    parse_message, extract_test_prefix, parse_cumulative_picks,
+    parse_message, extract_test_prefix, parse_cumulative_picks, detect_sport,
 )
 
 
@@ -262,3 +262,89 @@ class TestCumulativePicks:
             emoji_map,
         )
         assert len(results) == 1
+
+
+class TestSportDetection:
+    """Sport detection from pick text."""
+
+    def test_default_football(self):
+        assert detect_sport("Liverpool 2/1") == "football"
+
+    def test_default_football_to_beat(self):
+        assert detect_sport("Arsenal to beat Chelsea") == "football"
+
+    def test_rugby_keyword(self):
+        assert detect_sport("Munster -13 at 4/5") == "rugby"
+
+    def test_rugby_six_nations(self):
+        assert detect_sport("Ireland Six Nations 2/1") == "rugby"
+
+    def test_rugby_province(self):
+        assert detect_sport("Leinster to beat Ulster") == "rugby"
+
+    def test_nfl_team(self):
+        assert detect_sport("Chiefs to beat Eagles 3/1") == "nfl"
+
+    def test_nfl_keyword(self):
+        assert detect_sport("NFL Super Bowl over 45.5") == "nfl"
+
+    def test_nba_team(self):
+        assert detect_sport("Lakers 2/1") == "nba"
+
+    def test_nba_keyword(self):
+        assert detect_sport("NBA Celtics -5.5") == "nba"
+
+    def test_nhl_team(self):
+        assert detect_sport("Maple Leafs to win 6/4") == "nhl"
+
+    def test_mma_keyword(self):
+        assert detect_sport("UFC 300 main event by KO 3/1") == "mma"
+
+    def test_mma_weight_class(self):
+        assert detect_sport("Heavyweight bout by decision 5/2") == "mma"
+
+    def test_tennis_keyword(self):
+        assert detect_sport("Wimbledon Djokovic 4/6") == "tennis"
+
+    def test_golf_keyword(self):
+        assert detect_sport("Masters Tiger Woods top 10 finish") == "golf"
+
+    def test_golf_pga(self):
+        assert detect_sport("Rory McIlroy top 5 finish PGA") == "golf"
+
+    def test_boxing_keyword(self):
+        assert detect_sport("Boxing Fury by stoppage 5/4") == "boxing"
+
+    def test_darts_keyword(self):
+        assert detect_sport("PDC World Darts 6/1") == "darts"
+
+    def test_gaa_keyword(self):
+        assert detect_sport("GAA All-Ireland Dublin 2/1") == "gaa"
+
+    def test_horse_racing_keyword(self):
+        assert detect_sport("Cheltenham Gold Cup 8/1") == "horse_racing"
+
+    def test_horse_racing_grand_national(self):
+        assert detect_sport("Grand National each way 10/1") == "horse_racing"
+
+    def test_empty_string_defaults_football(self):
+        assert detect_sport("") == "football"
+
+    def test_none_defaults_football(self):
+        assert detect_sport(None) == "football"
+
+    def test_sport_in_parsed_pick(self):
+        """Sport field should be included in parsed pick data."""
+        result = parse_message("Munster -13 at 4/5", "Nialler")
+        assert result["type"] == "pick"
+        assert result["parsed_data"]["sport"] == "rugby"
+
+    def test_football_pick_sport_field(self):
+        result = parse_message("Liverpool 2/1", "Kev")
+        assert result["type"] == "pick"
+        assert result["parsed_data"]["sport"] == "football"
+
+    def test_nfl_pick_sport_field(self):
+        result = parse_message("Chiefs -3.5 evens", "DA")
+        assert result["type"] == "pick"
+        assert result["parsed_data"]["sport"] == "nfl"

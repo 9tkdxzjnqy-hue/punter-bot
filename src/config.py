@@ -36,5 +36,11 @@ class Config:
 
     # API-Football (free tier: 100 req/day)
     API_FOOTBALL_KEY = os.getenv("API_FOOTBALL_KEY", "")
+    # API-Sports keys for other sports (each has its own free tier: 100 req/day)
+    API_RUGBY_KEY = os.getenv("API_RUGBY_KEY", "")
+    API_NFL_KEY = os.getenv("API_NFL_KEY", "")
+    API_NBA_KEY = os.getenv("API_NBA_KEY", "")
+    API_NHL_KEY = os.getenv("API_NHL_KEY", "")
+    API_MMA_KEY = os.getenv("API_MMA_KEY", "")
     # The Odds API (free tier: 500 req/month)
     ODDS_API_KEY = os.getenv("ODDS_API_KEY", "")

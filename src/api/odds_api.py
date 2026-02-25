@@ -21,9 +21,10 @@ logger = logging.getLogger(__name__)
 BASE_URL = "https://api.the-odds-api.com/v4"
 CACHE_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "api_cache"
 
-# Sport keys for The Odds API
+# Sport keys for The Odds API — maps sport/competition names to API sport keys
 SPORT_KEYS = {
-    "football": "soccer_epl",  # Default to EPL
+    # Football (default)
+    "football": "soccer_epl",
     "epl": "soccer_epl",
     "premier league": "soccer_epl",
     "la liga": "soccer_spain_la_liga",
@@ -34,9 +35,34 @@ SPORT_KEYS = {
     "europa league": "soccer_uefa_europa_league",
     "fa cup": "soccer_fa_cup",
     "scottish premiership": "soccer_spl",
+    # Rugby
+    "rugby": "rugbyunion_six_nations",
+    "six nations": "rugbyunion_six_nations",
+    # NFL
+    "nfl": "americanfootball_nfl",
+    "super bowl": "americanfootball_nfl_super_bowl_winner",
+    # NBA
+    "nba": "basketball_nba",
+    # NHL
+    "nhl": "icehockey_nhl",
+    # MMA
+    "mma": "mma_mixed_martial_arts",
+    "ufc": "mma_mixed_martial_arts",
+    # Tennis
+    "tennis": "tennis_atp_french_open",
+    "wimbledon": "tennis_atp_wimbledon",
+    "australian open": "tennis_atp_aus_open",
+    "french open": "tennis_atp_french_open",
+    "us open tennis": "tennis_atp_us_open",
+    # Golf
+    "golf": "golf_masters_tournament_winner",
+    "masters": "golf_masters_tournament_winner",
+    "pga": "golf_pga_championship_winner",
+    # Boxing
+    "boxing": "boxing_boxing",
 }
 
-# Priority sport keys to fetch (covers most picks)
+# Priority sport keys to fetch per sport (covers most picks)
 PRIORITY_SPORTS = [
     "soccer_epl",
     "soccer_spain_la_liga",
@@ -45,6 +71,22 @@ PRIORITY_SPORTS = [
     "soccer_france_ligue_one",
     "soccer_uefa_champs_league",
 ]
+
+# Additional sport keys to search when a non-football sport is detected
+SPORT_PRIORITY_KEYS = {
+    "football": PRIORITY_SPORTS,
+    "rugby": ["rugbyunion_six_nations"],
+    "nfl": ["americanfootball_nfl"],
+    "nba": ["basketball_nba"],
+    "nhl": ["icehockey_nhl"],
+    "mma": ["mma_mixed_martial_arts"],
+    "tennis": [
+        "tennis_atp_french_open", "tennis_atp_wimbledon",
+        "tennis_atp_aus_open", "tennis_atp_us_open",
+    ],
+    "golf": ["golf_masters_tournament_winner", "golf_pga_championship_winner"],
+    "boxing": ["boxing_boxing"],
+}
 
 
 def _cache_path(sport_key):
@@ -127,20 +169,26 @@ def get_odds_for_sport(sport_key, regions="uk", markets="h2h"):
         return []
 
 
-def find_market_price(event_name, competition=None):
+def find_market_price(event_name, competition=None, sport=None):
     """
     Look up the market price for an event across cached odds data.
 
     Args:
         event_name: e.g. "Arsenal vs Chelsea"
         competition: Optional competition name to narrow the sport key
+        sport: Optional sport name (e.g. "football", "rugby")
 
     Returns:
         dict {"home": 1.95, "draw": 3.40, "away": 4.20} or None
     """
-    # Determine which sport key to search
+    # Determine which sport keys to search
     sport_key = _competition_to_sport_key(competition) if competition else None
-    sport_keys = [sport_key] if sport_key else PRIORITY_SPORTS
+    if sport_key:
+        sport_keys = [sport_key]
+    elif sport and sport in SPORT_PRIORITY_KEYS:
+        sport_keys = SPORT_PRIORITY_KEYS[sport]
+    else:
+        sport_keys = PRIORITY_SPORTS
 
     for sk in sport_keys:
         events = get_odds_for_sport(sk)
@@ -154,7 +202,7 @@ def find_market_price(event_name, competition=None):
     return None
 
 
-def get_best_odds_for_selection(event_name, team_name, competition=None):
+def get_best_odds_for_selection(event_name, team_name, competition=None, sport=None):
     """
     Get the best available odds for a specific team selection.
 
@@ -162,11 +210,12 @@ def get_best_odds_for_selection(event_name, team_name, competition=None):
         event_name: e.g. "Arsenal vs Chelsea"
         team_name: e.g. "Arsenal"
         competition: Optional competition name
+        sport: Optional sport name (e.g. "football", "rugby")
 
     Returns:
         float — best decimal odds, or None.
     """
-    prices = find_market_price(event_name, competition)
+    prices = find_market_price(event_name, competition, sport=sport)
     if not prices:
         return None
 

@@ -23,13 +23,14 @@ logger = logging.getLogger(__name__)
 FUZZY_THRESHOLD = 0.6
 
 
-def match_pick(description, bet_type="win"):
+def match_pick(description, bet_type="win", sport="football"):
     """
     Try to match a pick description to a cached fixture.
 
     Args:
         description: The raw pick text (e.g. "Liverpool 2/1", "Arsenal to beat Chelsea")
         bet_type: The detected bet type (win, btts, over_under, etc.)
+        sport: The detected sport (e.g. "football", "rugby", "nfl")
 
     Returns:
         dict with enrichment data, or None if no match found:
@@ -49,27 +50,27 @@ def match_pick(description, bet_type="win"):
     if not team_names:
         return None
 
-    fixtures = get_upcoming_fixtures()
+    fixtures = get_upcoming_fixtures(sport=sport)
     if not fixtures:
         logger.info("No cached fixtures — skipping match")
         return None
 
     # Tier 1: Exact alias match
-    result = _match_by_alias(team_names, fixtures)
+    result = _match_by_alias(team_names, fixtures, sport=sport)
     if result:
         logger.info("Tier 1 alias match: %s → %s", description[:50], result["event_name"])
         result["market_type"] = bet_type
         return result
 
     # Tier 2: Fuzzy string match
-    result = _match_by_fuzzy(team_names, fixtures)
+    result = _match_by_fuzzy(team_names, fixtures, sport=sport)
     if result:
         logger.info("Tier 2 fuzzy match: %s → %s", description[:50], result["event_name"])
         result["market_type"] = bet_type
         return result
 
     # Tier 3: LLM fallback
-    result = _match_by_llm(description, bet_type)
+    result = _match_by_llm(description, bet_type, sport=sport)
     if result:
         logger.info("Tier 3 LLM match: %s → %s", description[:50], result["event_name"])
         return result
@@ -122,27 +123,36 @@ def _extract_team_names(description):
     return names[:2]  # Max 2 teams
 
 
-def _resolve_alias(name):
+def _resolve_alias(name, sport="football"):
     """
-    Look up a team name in the aliases table.
+    Look up a team name in the aliases table, optionally filtered by sport.
 
+    Tries sport-specific alias first, then falls back to any sport.
     Returns the canonical name if found, otherwise the original name.
     """
     conn = get_db()
+    # Try sport-specific alias first
     row = conn.execute(
-        "SELECT canonical_name FROM team_aliases WHERE alias = ? COLLATE NOCASE",
-        (name.strip(),),
+        "SELECT canonical_name FROM team_aliases "
+        "WHERE alias = ? COLLATE NOCASE AND sport = ?",
+        (name.strip(), sport),
     ).fetchone()
+    if not row:
+        # Fall back to any sport
+        row = conn.execute(
+            "SELECT canonical_name FROM team_aliases WHERE alias = ? COLLATE NOCASE",
+            (name.strip(),),
+        ).fetchone()
     conn.close()
     return row["canonical_name"] if row else name
 
 
-def _match_by_alias(team_names, fixtures):
+def _match_by_alias(team_names, fixtures, sport="football"):
     """
     Tier 1: Resolve team names through the alias table, then find an exact
     match in the fixture list.
     """
-    resolved = [_resolve_alias(name) for name in team_names]
+    resolved = [_resolve_alias(name, sport=sport) for name in team_names]
 
     for fixture in fixtures:
         home = fixture["home_team"].lower()
@@ -158,7 +168,7 @@ def _match_by_alias(team_names, fixtures):
     return None
 
 
-def _match_by_fuzzy(team_names, fixtures):
+def _match_by_fuzzy(team_names, fixtures, sport="football"):
     """
     Tier 2: Use string similarity to find the closest matching fixture.
     """
@@ -170,7 +180,7 @@ def _match_by_fuzzy(team_names, fixtures):
             fixture_team = fixture[team_field].lower()
             for name in team_names:
                 # Try both the raw name and alias-resolved name
-                for candidate in (name.lower(), _resolve_alias(name).lower()):
+                for candidate in (name.lower(), _resolve_alias(name, sport=sport).lower()):
                     score = SequenceMatcher(None, candidate, fixture_team).ratio()
                     if score > best_score:
                         best_score = score
@@ -182,7 +192,7 @@ def _match_by_fuzzy(team_names, fixtures):
     return None
 
 
-def _match_by_llm(description, bet_type):
+def _match_by_llm(description, bet_type, sport="football"):
     """
     Tier 3: Send pick text + fixture list to the LLM and ask it to match.
 
@@ -200,7 +210,7 @@ def _match_by_llm(description, bet_type):
     import requests
 
     prompt = (
-        f'A punter submitted this pick: "{description}"\n\n'
+        f'A punter submitted this {sport} pick: "{description}"\n\n'
         f"Here are this weekend's fixtures:\n{fixture_list}\n\n"
         f"Which fixture does this pick refer to? Reply with ONLY a JSON object:\n"
         f'{{"fixture_id": <number or null>, "reason": "<brief explanation>"}}\n'
@@ -217,7 +227,7 @@ def _match_by_llm(description, bet_type):
             json={
                 "model": "llama-3.3-70b-versatile",
                 "messages": [
-                    {"role": "system", "content": "You match betting picks to football fixtures. Reply with JSON only."},
+                    {"role": "system", "content": f"You match betting picks to {sport} fixtures. Reply with JSON only."},
                     {"role": "user", "content": prompt},
                 ],
                 "temperature": 0.1,

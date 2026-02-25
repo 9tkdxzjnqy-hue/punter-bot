@@ -488,6 +488,7 @@ def handle_cumulative_picks(cumulative):
             odds_decimal=data["odds_decimal"],
             odds_original=data["odds_original"],
             bet_type=data["bet_type"],
+            sport=data.get("sport"),
         )
         # Only confirm new picks or updates where something actually changed
         if changed:
@@ -540,6 +541,7 @@ def handle_pick(parsed):
         odds_decimal=data["odds_decimal"],
         odds_original=data["odds_original"],
         bet_type=data["bet_type"],
+        sport=data.get("sport"),
     )
 
     # Build confirmation reply (single-pick always confirms)

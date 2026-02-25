@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 # Abbreviations to formal names for pick display (case-insensitive)
 PICK_ABBREVIATIONS = {
+    # Football
     "leics": "Leicester",
     "soton": "Southampton",
     "man utd": "Manchester United",
@@ -26,6 +27,16 @@ PICK_ABBREVIATIONS = {
     "bha": "Brighton",
     "whu": "West Ham",
     "qpr": "Queens Park Rangers",
+    # NFL
+    "kc": "Kansas City",
+    "sf": "San Francisco",
+    "gb": "Green Bay",
+    "ne": "New England",
+    "tb": "Tampa Bay",
+    # NBA
+    "sixers": "Philadelphia 76ers",
+    "cavs": "Cleveland Cavaliers",
+    "mavs": "Dallas Mavericks",
 }
 
 

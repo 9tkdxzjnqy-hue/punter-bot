@@ -35,6 +35,99 @@ WIN_PICK_PATTERNS = [
     re.compile(r"\bto\s+win\b", re.IGNORECASE),
 ]
 
+# Sport detection keywords — order matters (checked first to last, first match wins)
+SPORT_KEYWORDS = {
+    "rugby": re.compile(
+        r"\b(rugby|six\s*nations|pro\s*14|urc|heineken\s*cup|"
+        r"munster|leinster|ulster|connacht|"
+        r"all\s*blacks|springboks|wallabies|"
+        r"try\s*scorer)\b",
+        re.IGNORECASE,
+    ),
+    "nfl": re.compile(
+        r"\b(nfl|super\s*bowl|touchdown|"
+        r"chiefs|eagles|49ers|niners|bills|ravens|cowboys|packers|dolphins|"
+        r"lions|bengals|jets|patriots|steelers|broncos|chargers|raiders|"
+        r"seahawks|rams|cardinals|falcons|panthers|saints|buccaneers|bucs|"
+        r"bears|vikings|commanders|giants|texans|colts|jaguars|jags|titans)\b",
+        re.IGNORECASE,
+    ),
+    "nba": re.compile(
+        r"\b(nba|lakers|celtics|warriors|bucks|nuggets|76ers|sixers|"
+        r"nets|knicks|heat|suns|clippers|mavericks|mavs|grizzlies|"
+        r"cavaliers|cavs|timberwolves|wolves|pelicans|kings|hawks|"
+        r"raptors|thunder|blazers|spurs|rockets|pistons|pacers|"
+        r"hornets|wizards|magic|jazz)\b",
+        re.IGNORECASE,
+    ),
+    "nhl": re.compile(
+        r"\b(nhl|stanley\s*cup|"
+        r"maple\s*leafs|canadiens|habs|bruins|rangers|islanders|"
+        r"penguins|capitals|caps|flyers|red\s*wings|blackhawks|"
+        r"oilers|flames|canucks|avalanche|stars|predators|preds|"
+        r"lightning|panthers|hurricanes|canes|blue\s*jackets|"
+        r"kraken|wild|senators|sens|sabres|devils|ducks)\b",
+        re.IGNORECASE,
+    ),
+    "mma": re.compile(
+        r"\b(mma|ufc|bellator|ko|tko|submission|"
+        r"by\s*decision|by\s*knockout|octagon|"
+        r"flyweight|bantamweight|featherweight|lightweight|"
+        r"welterweight|middleweight|heavyweight)\b",
+        re.IGNORECASE,
+    ),
+    "horse_racing": re.compile(
+        r"\b(horse\s*racing|cheltenham|aintree|grand\s*national|"
+        r"royal\s*ascot|epsom|guineas|nap|"
+        r"each\s*way|going\s*ground|furlong|"
+        r"novice\s*hurdle|champion\s*hurdle|gold\s*cup)\b",
+        re.IGNORECASE,
+    ),
+    "tennis": re.compile(
+        r"\b(tennis|wimbledon|roland\s*garros|french\s*open|"
+        r"us\s*open\s*tennis|australian\s*open|grand\s*slam|"
+        r"atp|wta|sets?\s*handicap)\b",
+        re.IGNORECASE,
+    ),
+    "golf": re.compile(
+        r"\b(golf|masters|pga|ryder\s*cup|"
+        r"open\s*championship|us\s*open\s*golf|"
+        r"top\s*\d+\s*finish|outright\s*winner)\b",
+        re.IGNORECASE,
+    ),
+    "boxing": re.compile(
+        r"\b(boxing|bout|rounds?\s*betting|"
+        r"by\s*stoppage|on\s*points|undisputed)\b",
+        re.IGNORECASE,
+    ),
+    "darts": re.compile(
+        r"\b(darts|pdc|bdo|"
+        r"premier\s*league\s*darts|"
+        r"world\s*darts|180s?\s*over)\b",
+        re.IGNORECASE,
+    ),
+    "gaa": re.compile(
+        r"\b(gaa|hurling|camogie|"
+        r"all[\s-]*ireland|sam\s*maguire|liam\s*maccarthy|"
+        r"gaa\s*football)\b",
+        re.IGNORECASE,
+    ),
+}
+
+
+def detect_sport(text):
+    """
+    Detect the sport from pick text using keyword matching.
+
+    Returns the sport name (e.g. "rugby", "nfl", "tennis") or "football" as default.
+    """
+    if not text:
+        return "football"
+    for sport, pattern in SPORT_KEYWORDS.items():
+        if pattern.search(text):
+            return sport
+    return "football"
+
 
 def _looks_like_pick(text):
     """Check if text looks like a pick (bet description) without explicit odds."""
@@ -180,11 +273,15 @@ def _parse_pick(text, sender, sender_phone=""):
     # Description is the full text minus the odds
     description = text
 
+    # Detect sport from pick text
+    sport = detect_sport(text)
+
     return _make_result("pick", text, sender, {
         "description": description,
         "odds_original": odds_original,
         "odds_decimal": odds_decimal,
         "bet_type": bet_type,
+        "sport": sport,
     }, sender_phone)
 
 
@@ -242,6 +339,7 @@ def parse_cumulative_picks(text, emoji_to_player):
                 "odds_original": "placer",
                 "odds_decimal": 2.0,
                 "bet_type": "win",
+                "sport": detect_sport(pick_text),
             }))
 
     return results

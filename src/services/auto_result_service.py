@@ -242,6 +242,7 @@ def _evaluate_pick(pick, fixture):
         "win", "loss", or None if cannot evaluate.
     """
     bet_type = pick.get("bet_type", "win")
+    sport = fixture.get("sport", "football")
     home_score = fixture.get("home_score")
     away_score = fixture.get("away_score")
 
@@ -254,11 +255,19 @@ def _evaluate_pick(pick, fixture):
     if bet_type == "win":
         return _evaluate_win(pick, home_team, away_team, home_score, away_score)
     elif bet_type == "btts":
+        # BTTS is football-specific (both teams to score)
+        if sport != "football":
+            return None
         return _evaluate_btts(home_score, away_score)
     elif bet_type == "over_under":
         return _evaluate_over_under(pick, home_score, away_score)
     elif bet_type == "ht_ft":
+        # HT/FT is football-specific
+        if sport != "football":
+            return None
         return _evaluate_ht_ft(pick, fixture)
+    elif bet_type == "handicap":
+        return _evaluate_handicap(pick, home_team, away_team, home_score, away_score)
     else:
         # Default to win evaluation for unknown bet types
         return _evaluate_win(pick, home_team, away_team, home_score, away_score)
@@ -356,6 +365,41 @@ def _evaluate_ht_ft(pick, fixture):
     return None
 
 
+def _evaluate_handicap(pick, home_team, away_team, home_score, away_score):
+    """
+    Evaluate a handicap pick. Works for all sports.
+
+    Parses the handicap value from the description and applies it.
+    """
+    description = pick.get("description", "")
+
+    # Extract handicap value (e.g. "-13", "+7.5")
+    handicap_match = re.search(r"([+-])\s*(\d+\.?\d*)", description)
+    if not handicap_match:
+        return None
+
+    sign = handicap_match.group(1)
+    value = float(handicap_match.group(2))
+    handicap = value if sign == "+" else -value
+
+    # Determine which team has the handicap
+    picked_home = _team_in_text(home_team, description)
+    picked_away = _team_in_text(away_team, description)
+
+    if picked_home and not picked_away:
+        adjusted = (home_score + handicap) - away_score
+    elif picked_away and not picked_home:
+        adjusted = (away_score + handicap) - home_score
+    else:
+        return None
+
+    if adjusted > 0:
+        return "win"
+    elif adjusted < 0:
+        return "loss"
+    return None  # Dead heat / push — can't determine
+
+
 def _team_in_text(team_name, text):
     """Check if a team name (or a significant prefix) appears in text."""
     if not team_name or not text:
@@ -372,8 +416,10 @@ def _team_in_text(team_name, text):
     if first_word and len(first_word) >= 4 and first_word in text_lower:
         return True
 
-    # Try without common suffixes
-    for suffix in (" fc", " city", " united", " town"):
+    # Try without common suffixes (football + rugby + other sports)
+    for suffix in (" fc", " city", " united", " town",
+                   " rugby", " rfc",
+                   " sc", " cf"):
         if team_lower.endswith(suffix):
             base = team_lower[:-len(suffix)]
             if base and len(base) >= 4 and base in text_lower:

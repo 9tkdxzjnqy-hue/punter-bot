@@ -8,7 +8,7 @@ from src.services.week_service import is_past_deadline
 logger = logging.getLogger(__name__)
 
 
-def submit_pick(player_id, week_id, description, odds_decimal, odds_original, bet_type):
+def submit_pick(player_id, week_id, description, odds_decimal, odds_original, bet_type, sport=None):
     """
     Store a pick for a player in a given week.
 
@@ -28,8 +28,16 @@ def submit_pick(player_id, week_id, description, odds_decimal, odds_original, be
     is_late = 1 if is_past_deadline() else 0
     previous_description = None
 
+    # Detect sport from pick text if not provided by caller
+    if not sport:
+        from src.parsers.message_parser import detect_sport
+        sport = detect_sport(description)
+
     # Best-effort enrichment — never block pick submission
-    enrichment = _try_enrich(description, bet_type)
+    enrichment = _try_enrich(description, bet_type, sport)
+
+    # Use enrichment sport if available, otherwise fall back to detected sport
+    pick_sport = enrichment.get("sport") or sport
 
     if existing:
         existing = dict(existing)
@@ -48,7 +56,7 @@ def submit_pick(player_id, week_id, description, odds_decimal, odds_original, be
             "WHERE week_id = ? AND player_id = ?",
             (description, odds_decimal, odds_original, bet_type,
              datetime.utcnow().isoformat(), is_late,
-             enrichment.get("sport"), enrichment.get("competition"),
+             pick_sport, enrichment.get("competition"),
              enrichment.get("event_name"), enrichment.get("market_type"),
              enrichment.get("api_fixture_id"), enrichment.get("market_price"),
              week_id, player_id),
@@ -62,7 +70,7 @@ def submit_pick(player_id, week_id, description, odds_decimal, odds_original, be
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (week_id, player_id, description, odds_decimal, odds_original,
              bet_type, datetime.utcnow().isoformat(), is_late,
-             enrichment.get("sport"), enrichment.get("competition"),
+             pick_sport, enrichment.get("competition"),
              enrichment.get("event_name"), enrichment.get("market_type"),
              enrichment.get("api_fixture_id"), enrichment.get("market_price")),
         )
@@ -83,14 +91,24 @@ def submit_pick(player_id, week_id, description, odds_decimal, odds_original, be
     return dict(pick), is_update, changed, previous_description
 
 
-def _try_enrich(description, bet_type):
+# Sports that have no fixture API — odds-only enrichment
+ODDS_ONLY_SPORTS = {"tennis", "golf", "boxing"}
+
+
+def _try_enrich(description, bet_type, sport="football"):
     """
     Attempt to match a pick to a fixture and look up market odds.
     Returns empty dict on any failure — enrichment is best-effort.
+
+    For odds-only sports (tennis, golf, boxing), skips fixture matching
+    and queries The Odds API directly for market prices.
     """
+    if sport in ODDS_ONLY_SPORTS:
+        return _try_enrich_odds_only(description, sport)
+
     try:
         from src.services.match_service import match_pick
-        result = match_pick(description, bet_type)
+        result = match_pick(description, bet_type, sport=sport)
         if result:
             logger.info("Enriched pick: %s → %s", description[:40], result.get("event_name", "?"))
             # Try to get market price from The Odds API
@@ -102,6 +120,7 @@ def _try_enrich(description, bet_type):
                     price = get_best_odds_for_selection(
                         result["event_name"], teams[0],
                         competition=result.get("competition"),
+                        sport=sport,
                     )
                     if price:
                         result["market_price"] = price
@@ -112,6 +131,36 @@ def _try_enrich(description, bet_type):
     except Exception as e:
         logger.warning("Enrichment failed (non-blocking): %s", e)
     return {}
+
+
+def _try_enrich_odds_only(description, sport):
+    """
+    Odds-only enrichment for sports without fixture APIs (tennis, golf, boxing).
+
+    Queries The Odds API directly for market prices without requiring a fixture match.
+    Returns enrichment dict with sport and market_price, or empty dict.
+    """
+    try:
+        from src.api.odds_api import get_best_odds_for_selection
+        from src.services.match_service import _extract_team_names
+
+        teams = _extract_team_names(description)
+        if not teams:
+            return {"sport": sport}
+
+        # For odds-only sports, search without an event_name — use the team/player name
+        # as the event name since we don't have fixture data
+        price = get_best_odds_for_selection(
+            teams[0], teams[0], sport=sport,
+        )
+        result = {"sport": sport}
+        if price:
+            result["market_price"] = price
+            logger.info("Odds-only price for %s: %s @ %.2f", sport, teams[0], price)
+        return result
+    except Exception as e:
+        logger.warning("Odds-only enrichment failed (non-blocking): %s", e)
+        return {"sport": sport}
 
 
 def _try_schedule_monitor(enrichment, week_id):

@@ -677,27 +677,13 @@ def _first_name_from_player(player):
     return formal.replace("Mr ", "").strip() if formal.startswith("Mr ") else formal
 
 
-def _shadow_message(sender, body, template_reply, source_group_id):
+def _shadow_message(sender, body, reply, source_group_id):
     """
-    Send the framed (LLM opening/closing + template) version to the shadow group.
-    This shows exactly what would go live if LLM framing is enabled.
+    Mirror the bot's reply to the shadow group for monitoring.
+    The reply is already framed by butler functions — no re-framing needed.
     """
     try:
-        # Temporarily force LLM on for the shadow call
-        original_enabled = Config.LLM_ENABLED
-        Config.LLM_ENABLED = True
-
-        player = lookup_player(sender_name=sender)
-        player_name = _first_name_from_player(player) if player else sender
-
-        context = f'Bot replied to {sender}: "{template_reply}"'
-        framed = butler._frame(template_reply, context, player_name=player_name)
-        Config.LLM_ENABLED = original_enabled
-
-        if framed != template_reply:
-            shadow_msg = f"[{sender}]: {body}\n\n🤖 Framed:\n{framed}"
-        else:
-            shadow_msg = f"[{sender}]: {body}\n\n📋 Template (framing failed):\n{template_reply}"
+        shadow_msg = f"[{sender}]: {body}\n\n🤖 Reply:\n{reply}"
         send_message(Config.SHADOW_GROUP_ID, shadow_msg)
     except Exception as e:
         logger.warning("Shadow message failed: %s", e)

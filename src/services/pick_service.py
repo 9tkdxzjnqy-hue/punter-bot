@@ -1,8 +1,11 @@
+import logging
 from datetime import datetime
 
 from src.db import get_db
 from src.services.player_service import get_all_players
 from src.services.week_service import is_past_deadline
+
+logger = logging.getLogger(__name__)
 
 
 def submit_pick(player_id, week_id, description, odds_decimal, odds_original, bet_type):
@@ -10,6 +13,7 @@ def submit_pick(player_id, week_id, description, odds_decimal, odds_original, be
     Store a pick for a player in a given week.
 
     Uses INSERT OR REPLACE so re-submissions update the existing pick.
+    Attempts to enrich the pick by matching it to a cached fixture (best-effort).
     Returns (pick_dict, is_update, changed, previous_description).
     previous_description: the old pick text when it's an update, else None.
     """
@@ -24,6 +28,9 @@ def submit_pick(player_id, week_id, description, odds_decimal, odds_original, be
     is_late = 1 if is_past_deadline() else 0
     previous_description = None
 
+    # Best-effort enrichment — never block pick submission
+    enrichment = _try_enrich(description, bet_type)
+
     if existing:
         existing = dict(existing)
         previous_description = existing["description"]
@@ -35,19 +42,29 @@ def submit_pick(player_id, week_id, description, odds_decimal, odds_original, be
         )
         conn.execute(
             "UPDATE picks SET description = ?, odds_decimal = ?, odds_original = ?, "
-            "bet_type = ?, submitted_at = ?, is_late = ? "
+            "bet_type = ?, submitted_at = ?, is_late = ?, "
+            "sport = ?, competition = ?, event_name = ?, market_type = ?, "
+            "api_fixture_id = ?, market_price = ? "
             "WHERE week_id = ? AND player_id = ?",
             (description, odds_decimal, odds_original, bet_type,
-             datetime.utcnow().isoformat(), is_late, week_id, player_id),
+             datetime.utcnow().isoformat(), is_late,
+             enrichment.get("sport"), enrichment.get("competition"),
+             enrichment.get("event_name"), enrichment.get("market_type"),
+             enrichment.get("api_fixture_id"), enrichment.get("market_price"),
+             week_id, player_id),
         )
         is_update = True
     else:
         conn.execute(
             "INSERT INTO picks (week_id, player_id, description, odds_decimal, "
-            "odds_original, bet_type, submitted_at, is_late) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "odds_original, bet_type, submitted_at, is_late, "
+            "sport, competition, event_name, market_type, api_fixture_id, market_price) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (week_id, player_id, description, odds_decimal, odds_original,
-             bet_type, datetime.utcnow().isoformat(), is_late),
+             bet_type, datetime.utcnow().isoformat(), is_late,
+             enrichment.get("sport"), enrichment.get("competition"),
+             enrichment.get("event_name"), enrichment.get("market_type"),
+             enrichment.get("api_fixture_id"), enrichment.get("market_price")),
         )
         is_update = False
         changed = True
@@ -61,6 +78,48 @@ def submit_pick(player_id, week_id, description, odds_decimal, odds_original, be
     conn.close()
 
     return dict(pick), is_update, changed, previous_description
+
+
+def _try_enrich(description, bet_type):
+    """
+    Attempt to match a pick to a fixture and look up market odds.
+    Returns empty dict on any failure — enrichment is best-effort.
+    """
+    try:
+        from src.services.match_service import match_pick
+        result = match_pick(description, bet_type)
+        if result:
+            logger.info("Enriched pick: %s → %s", description[:40], result.get("event_name", "?"))
+            # Try to get market price from The Odds API
+            try:
+                from src.api.odds_api import get_best_odds_for_selection
+                from src.services.match_service import _extract_team_names
+                teams = _extract_team_names(description)
+                if teams and result.get("event_name"):
+                    price = get_best_odds_for_selection(
+                        result["event_name"], teams[0],
+                        competition=result.get("competition"),
+                    )
+                    if price:
+                        result["market_price"] = price
+                        logger.info("Market price: %s @ %.2f", teams[0], price)
+            except Exception as e:
+                logger.warning("Market price lookup failed (non-blocking): %s", e)
+            return result
+    except Exception as e:
+        logger.warning("Enrichment failed (non-blocking): %s", e)
+    return {}
+
+
+def update_pick_market_price(pick_id, market_price):
+    """Update the market_price on a pick (from The Odds API)."""
+    conn = get_db()
+    conn.execute(
+        "UPDATE picks SET market_price = ? WHERE id = ?",
+        (market_price, pick_id),
+    )
+    conn.commit()
+    conn.close()
 
 
 def get_picks_for_week(week_id):
@@ -109,3 +168,18 @@ def get_player_pick(week_id, player_id):
     ).fetchone()
     conn.close()
     return dict(pick) if pick else None
+
+
+def get_matched_picks_for_week(week_id):
+    """Return picks that have been matched to a fixture (have api_fixture_id)."""
+    conn = get_db()
+    picks = conn.execute(
+        "SELECT p.*, pl.nickname, pl.formal_name, pl.emoji "
+        "FROM picks p "
+        "JOIN players pl ON p.player_id = pl.id "
+        "WHERE p.week_id = ? AND p.api_fixture_id IS NOT NULL "
+        "ORDER BY p.submitted_at",
+        (week_id,),
+    ).fetchall()
+    conn.close()
+    return [dict(p) for p in picks]

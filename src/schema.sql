@@ -15,11 +15,12 @@ CREATE TABLE IF NOT EXISTS weeks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     week_number INTEGER NOT NULL,
     season TEXT NOT NULL,
+    group_id TEXT NOT NULL DEFAULT 'default',
     deadline TIMESTAMP NOT NULL,
     status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed', 'completed')),
     placer_id INTEGER REFERENCES players(id),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(week_number, season)
+    UNIQUE(week_number, season, group_id)
 );
 
 CREATE TABLE IF NOT EXISTS picks (
@@ -32,6 +33,14 @@ CREATE TABLE IF NOT EXISTS picks (
     bet_type TEXT NOT NULL DEFAULT 'win' CHECK (bet_type IN ('win', 'btts', 'handicap', 'over_under', 'ht_ft', 'other')),
     submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     is_late INTEGER NOT NULL DEFAULT 0,
+    -- Enrichment columns (populated by API matching, nullable)
+    sport TEXT,
+    competition TEXT,
+    event_name TEXT,
+    market_type TEXT,
+    api_fixture_id INTEGER,
+    market_price REAL,
+    confirmed_odds REAL,
     UNIQUE(week_id, player_id)
 );
 
@@ -70,6 +79,30 @@ CREATE TABLE IF NOT EXISTS rotation_queue (
     position INTEGER NOT NULL,
     week_added INTEGER REFERENCES weeks(id),
     processed INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS fixtures (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    api_id INTEGER NOT NULL UNIQUE,
+    sport TEXT NOT NULL DEFAULT 'football',
+    competition TEXT NOT NULL,
+    competition_id INTEGER,
+    home_team TEXT NOT NULL,
+    away_team TEXT NOT NULL,
+    kickoff TIMESTAMP NOT NULL,
+    status TEXT DEFAULT 'NS',
+    home_score INTEGER,
+    away_score INTEGER,
+    ht_home_score INTEGER,
+    ht_away_score INTEGER,
+    fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    raw_json TEXT
+);
+
+CREATE TABLE IF NOT EXISTS team_aliases (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    alias TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    canonical_name TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS bet_slips (

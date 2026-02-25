@@ -70,7 +70,7 @@ class TestCumulativePickWebhook:
         assert data["action"] == "replied"
         assert "Noted and recorded" in data["reply"] or "Updated" in data["reply"]
 
-        week = get_or_create_current_week()
+        week = get_or_create_current_week(group_id="test-group@g.us")
         picks = get_picks_for_week(week["id"])
         assert len(picks) == 3
 
@@ -97,7 +97,7 @@ class TestCumulativePickWebhook:
         client = app.test_client()
 
         # First: submit Pawn and Kev picks
-        week = get_or_create_current_week()
+        week = get_or_create_current_week(group_id="test-group@g.us")
         players = get_all_players()
         pawn = next(p for p in players if p["nickname"] == "Pawn")
         kev = next(p for p in players if p["nickname"] == "Kev")
@@ -187,7 +187,7 @@ class TestCumulativePickWebhook:
         data = resp.get_json()
         assert data["action"] == "replied"
 
-        week = get_or_create_current_week()
+        week = get_or_create_current_week(group_id="test-group@g.us")
         picks = get_picks_for_week(week["id"])
         descriptions = {p["nickname"]: p["description"] for p in picks}
 
@@ -213,7 +213,7 @@ class TestCumulativePickWebhook:
         client = app.test_client()
 
         # First: Pawn had Dortmund
-        week = get_or_create_current_week()
+        week = get_or_create_current_week(group_id="test-group@g.us")
         players = get_all_players()
         pawn = next(p for p in players if p["nickname"] == "Pawn")
         submit_pick(pawn["id"], week["id"], "Dortmund 6/10", 1.6, "6/10", "win")
@@ -259,7 +259,7 @@ class TestCumulativePickWebhook:
         app = create_app()
         client = app.test_client()
 
-        week = get_or_create_current_week()
+        week = get_or_create_current_week(group_id="test-group@g.us")
         players = get_all_players()
 
         # Submit all 6 picks so "all picks in"
@@ -314,7 +314,7 @@ class TestCumulativePickWebhook:
         app = create_app()
         client = app.test_client()
 
-        week = get_or_create_current_week()
+        week = get_or_create_current_week(group_id="test-group@g.us")
         players = get_all_players()
 
         for p in players:
@@ -357,7 +357,7 @@ class TestCumulativePickWebhook:
         app = create_app()
         client = app.test_client()
 
-        week = get_or_create_current_week()
+        week = get_or_create_current_week(group_id="test-group@g.us")
         players = get_all_players()
 
         for p in players:

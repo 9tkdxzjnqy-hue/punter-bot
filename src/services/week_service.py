@@ -15,21 +15,22 @@ def _now():
     return datetime.now(tz)
 
 
-def get_or_create_current_week():
+def get_or_create_current_week(group_id="default"):
     """
-    Return the current open week, or create one if none exists.
+    Return the current open week for a group, or create one if none exists.
 
-    Weeks are numbered sequentially within a season (calendar year).
+    Weeks are numbered sequentially within a season (calendar year) per group.
     The deadline is always Friday 10PM in the configured timezone.
     """
     conn = get_db()
     now = _now()
     season = str(now.year)
 
-    # Check for an existing open week
+    # Check for an existing open week for this group
     week = conn.execute(
-        "SELECT * FROM weeks WHERE status = 'open' AND season = ? ORDER BY id DESC LIMIT 1",
-        (season,),
+        "SELECT * FROM weeks WHERE status = 'open' AND season = ? AND group_id = ? "
+        "ORDER BY id DESC LIMIT 1",
+        (season, group_id),
     ).fetchone()
 
     if week:
@@ -39,62 +40,63 @@ def get_or_create_current_week():
     # Calculate the next Friday 10PM deadline
     deadline = _next_friday_10pm(now)
 
-    # Get next week number
+    # Get next week number for this group
     last_week = conn.execute(
-        "SELECT MAX(week_number) as max_num FROM weeks WHERE season = ?",
-        (season,),
+        "SELECT MAX(week_number) as max_num FROM weeks WHERE season = ? AND group_id = ?",
+        (season, group_id),
     ).fetchone()
     week_number = (last_week["max_num"] or 0) + 1
 
     conn.execute(
-        "INSERT INTO weeks (week_number, season, deadline, status) VALUES (?, ?, ?, 'open')",
-        (week_number, season, deadline.isoformat()),
+        "INSERT INTO weeks (week_number, season, group_id, deadline, status) "
+        "VALUES (?, ?, ?, ?, 'open')",
+        (week_number, season, group_id, deadline.isoformat()),
     )
     conn.commit()
 
     week = conn.execute(
-        "SELECT * FROM weeks WHERE season = ? AND week_number = ?",
-        (season, week_number),
+        "SELECT * FROM weeks WHERE season = ? AND week_number = ? AND group_id = ?",
+        (season, week_number, group_id),
     ).fetchone()
     conn.close()
 
     # New week = new persona
     try:
         from src.llm_client import reset_persona
-        persona = reset_persona()
-        if persona:
-            logger.info("New week %d — persona: %s", week_number, persona.get("name", "?"))
+        reset_persona()
     except Exception:
         pass
 
     return dict(week)
 
 
-def get_current_week():
-    """Return the current open or closed week, or None."""
+def get_current_week(group_id="default"):
+    """Return the current open or closed week for a group, or None."""
     conn = get_db()
     season = str(_now().year)
     week = conn.execute(
-        "SELECT * FROM weeks WHERE status IN ('open', 'closed') AND season = ? ORDER BY id DESC LIMIT 1",
-        (season,),
+        "SELECT * FROM weeks WHERE status IN ('open', 'closed') AND season = ? "
+        "AND group_id = ? ORDER BY id DESC LIMIT 1",
+        (season, group_id),
     ).fetchone()
     conn.close()
     return dict(week) if week else None
 
 
-def get_week_for_reset():
+def get_week_for_reset(group_id="default"):
     """
     Return a week that can be reset: current open/closed, or most recent completed.
     Used by !resetweek to allow re-testing after a week is completed.
     """
-    week = get_current_week()
+    week = get_current_week(group_id=group_id)
     if week:
         return week
     conn = get_db()
     season = str(_now().year)
     week = conn.execute(
-        "SELECT * FROM weeks WHERE status = 'completed' AND season = ? ORDER BY id DESC LIMIT 1",
-        (season,),
+        "SELECT * FROM weeks WHERE status = 'completed' AND season = ? "
+        "AND group_id = ? ORDER BY id DESC LIMIT 1",
+        (season, group_id),
     ).fetchone()
     conn.close()
     return dict(week) if week else None

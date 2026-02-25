@@ -413,6 +413,29 @@ def _picks_kicker(pick_summaries):
     return llm_client.generate(context)
 
 
+def banter_reply(sender, body, player=None):
+    """
+    Generate a banter response when the bot is mentioned or Brian is stirring.
+
+    Returns a string response, or None if the LLM has nothing to say.
+    """
+    player_name = _first_name(player) if player else sender
+
+    # Determine scenario
+    if sender and sender.lower().startswith("brian"):
+        scenario = "brian_stirring"
+    else:
+        scenario = "bot_mentioned"
+
+    context = (
+        f'{sender} said in the group chat: "{body}"\n\n'
+        f"Respond in character. One sentence."
+    )
+
+    response = llm_client.generate(context, scenario=scenario, player_name=player_name)
+    return response if response else None
+
+
 def _primary_emoji(emoji_str):
     """Get the primary emoji from a comma-separated emoji string."""
     if not emoji_str:

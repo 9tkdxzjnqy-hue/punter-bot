@@ -28,3 +28,8 @@ class Config:
     GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
     # Shadow mode: mirror main group messages to this group with LLM responses
     SHADOW_GROUP_ID = os.getenv("SHADOW_GROUP_ID", "")
+
+    # API-Football (free tier: 100 req/day)
+    API_FOOTBALL_KEY = os.getenv("API_FOOTBALL_KEY", "")
+    # The Odds API (free tier: 500 req/month)
+    ODDS_API_KEY = os.getenv("ODDS_API_KEY", "")

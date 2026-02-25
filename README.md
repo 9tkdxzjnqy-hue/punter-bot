@@ -102,6 +102,8 @@ cd ~/punter-bot && git pull && pm2 restart all
 - `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` for health alerts
 - `LLM_ENABLED=false` — set to `true` to activate LLM personality
 - `GROQ_API_KEY` — Groq API key (free tier)
+- `API_FOOTBALL_KEY` — API-Football key (free tier: 100 req/day)
+- `ODDS_API_KEY` — The Odds API key (free tier: 500 req/month)
 - `SHADOW_GROUP_ID` — test group ID for shadow mode (LLM preview without affecting main group)
 - See `MAIN_GROUP_READY.md` for the launch checklist
 
@@ -140,11 +142,18 @@ punter-bot/
 │   ├── butler.py          # Message formatting (LLM-enhanced with template fallback)
 │   ├── llm_client.py      # Groq API wrapper + persona management
 │   ├── config.py          # Environment config
-│   ├── db.py              # Database helpers
-│   ├── schema.sql         # SQLite schema
+│   ├── db.py              # Database helpers + migrations
+│   ├── schema.sql         # SQLite schema (10 tables)
+│   ├── api/               # External API clients
+│   │   ├── api_football.py  # API-Football v3 (fixtures, scores)
+│   │   └── odds_api.py      # The Odds API (market prices)
 │   ├── parsers/
 │   │   └── message_parser.py
-│   └── services/          # Business logic (picks, results, stats, etc.)
+│   └── services/          # Business logic
+│       ├── fixture_service.py   # Weekend fixture caching
+│       ├── match_service.py     # Pick-to-fixture matching (alias → fuzzy → LLM)
+│       ├── auto_result_service.py  # Auto-resulting from completed fixtures
+│       └── ...                  # picks, results, stats, rotation, etc.
 ├── scripts/
 │   ├── health_check.py    # Health monitor + Telegram alerts
 │   └── restart.sh

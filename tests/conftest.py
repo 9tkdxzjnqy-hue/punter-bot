@@ -21,6 +21,10 @@ def test_db(monkeypatch):
     monkeypatch.setattr("src.config.Config.TIMEZONE", "Europe/Dublin")
     monkeypatch.setattr("src.config.Config.TEST_MODE", True)
     monkeypatch.setattr("src.config.Config.ROTATION_ORDER", [])  # Use DB rotation_position
+    monkeypatch.setattr("src.config.Config.LLM_ENABLED", False)
+    monkeypatch.setattr("src.config.Config.GROQ_API_KEY", "")
+    monkeypatch.setattr("src.config.Config.API_FOOTBALL_KEY", "")
+    monkeypatch.setattr("src.config.Config.ODDS_API_KEY", "")
 
     from src.db import init_db
     init_db()

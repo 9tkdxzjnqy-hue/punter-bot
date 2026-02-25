@@ -62,20 +62,23 @@
 - **Bot reply loops**: `message_create` captures bot's own replies. Fixed with `botSentMessages` tracking set in the bridge
 - **urllib3 OpenSSL warning**: macOS system Python 3.9 uses LibreSSL 2.8.3. Harmless warning, can be ignored
 - **Chromium zombie processes**: Killing the bridge with ctrl-C sometimes leaves Chromium running. Use `pkill -f "Chromium.*wwebjs_auth"` before restarting
-- **`_shadow_message()` broken**: Still calls old `llm_client.generate()` which no longer exists. Non-critical — wrapped in try/except so main group unaffected. Needs fix before shadow mode works again.
+- **`_shadow_message()` fixed**: Now calls working `llm_client.generate()` (re-implemented in Phase 2).
 
-## Current State (2026-02-23)
+## Current State (2026-02-25)
 
 - **Deployed on OCI**: Ubuntu 22.04 VM, Always Free tier (193.123.179.96)
 - **All services running via PM2**: Bridge on :3000, Flask on :5001, health check
 - **WhatsApp connected**: Bot authenticated and live in main group (447762550958-1423072447@g.us)
 - **SSH access**: `ssh -i ~/Documents/Oracle/ssh-key-2026-02-18.key ubuntu@193.123.179.96`
-- **Tests**: 73 passing (31 parser + 42 service tests)
-- **Phase 1 complete**: All services wired up, commands working, scheduler initialized
+- **Tests**: 92 passing (31 parser + 61 service/integration tests)
+- **Phase 2 complete**: Structured data, API integration, auto-resulting, market prices
 - **Admin phones configured**: Ed (`353871527436@c.us`) as ADMIN_PHONE, all 6 player phones stored in DB
 - **LLM personality**: Butler persona live in main group (`LLM_ENABLED=true`)
 - **LLM architecture**: Framing-only — butler adds opening/closing lines around templates, never rewrites structured content
-- **Shadow mode**: `_shadow_message()` currently broken — needs fix before shadow testing resumes
+- **LLM functions**: `generate()`, `banter_reply()`, `reset_persona()` all implemented and working
+- **Group isolation**: `group_id` on weeks table — test and main groups have separate week/pick spaces
+- **API-Football**: Fixture caching (Wed 7:30PM), pick enrichment, auto-resulting (Sun 8PM, Mon 10AM)
+- **The Odds API**: Market price lookup on pick submission (best-effort)
 - **Friday reminder**: Updated to 7PM
 
 ## Phase 0.5: Cloud Migration [LIVE]
@@ -141,11 +144,9 @@ The butler is formally nameless — the lads call him Botsu. He finds the whole 
 - ON: pick confirmations, result announcements, reminders, banter (direct mentions, Brian stirring)
 - OFF: !picks, !stats, !leaderboard, !rotation, !vault, !help, bet slip, penalties (clean templates)
 
-### Shadow Mode [BROKEN — needs fix]
-- `_shadow_message()` in `app.py` still calls old `llm_client.generate()` — throws silent error
-- Main group unaffected (wrapped in try/except)
-- Fix required before shadow testing can resume next weekend
-- Bridge only reads `GROUP_CHAT_ID` (singular) — does not support `GROUP_CHAT_IDS` for multi-group monitoring
+### Shadow Mode [FIXED]
+- `_shadow_message()` now calls working `llm_client.generate()` (re-implemented in Phase 2)
+- Bridge supports `GROUP_CHAT_IDS` for multi-group monitoring
 
 ### Kill Switch
 To disable LLM quickly if needed:
@@ -154,18 +155,76 @@ sed -i 's/LLM_ENABLED=true/LLM_ENABLED=false/' ~/punter-bot/.env
 pm2 restart all
 ```
 
-## Phase 2: Enhancements [PLANNED]
+## Phase 2: Structured Data & API Integration [COMPLETE]
 
-### Bet Slip & Other
-- [ ] Bet slip image reading (OCR)
-- [ ] Monday recap (currently week summary fires when last result is in)
-- [ ] Fix `_shadow_message()` for shadow testing to resume
+### Step 0a: Fix Broken LLM Functions (2026-02-25)
+- [x] `llm_client.generate()` — re-implemented as plain-text LLM call (not JSON framing)
+- [x] `butler.banter_reply()` — implemented for Brian/bot mention banter
+- [x] `llm_client.reset_persona()` — implemented as no-op (returns None)
+- [x] `_shadow_message()` now works — calls working `generate()`
 
-## Phase 3: Intelligence [PLANNED]
+### Step 0b: Group Isolation (2026-02-25)
+- [x] Added `group_id` column to `weeks` table (with migration for existing data)
+- [x] Updated `UNIQUE` constraint: `UNIQUE(week_number, season, group_id)`
+- [x] All week_service functions accept `group_id` parameter
+- [x] `app.py` stores `group_id` on Flask `g` object, threads through all handlers
+- [x] Scheduler jobs pass `group_id` for main group
+- [x] Test and main groups now fully isolated in the database
 
-### API & Validation
-- [ ] API integration (The Odds API, API-Football)
-- [ ] **Match start validation** — Check if pick is for a match that has already started; warn or void
-- [ ] Automatic result detection
+### Step 1a: Schema Extensions (2026-02-25)
+- [x] 7 new columns on `picks`: sport, competition, event_name, market_type, api_fixture_id, market_price, confirmed_odds
+- [x] New `fixtures` table (api_id, sport, competition, teams, kickoff, scores, status)
+- [x] New `team_aliases` table (alias → canonical_name, COLLATE NOCASE)
+- [x] 50+ team aliases seeded (Premier League, European clubs, Scottish)
+- [x] Migration functions in `db.py` (ALTER TABLE, non-destructive)
+
+### Step 1b: API-Football Client (2026-02-25)
+- [x] `src/api/api_football.py` — full v3 client with local file caching
+- [x] `src/services/fixture_service.py` — weekend fixture fetch (Fri-Mon), cache to DB
+- [x] Scheduler job: fetch fixtures Wed 7:30PM (Europe/Dublin)
+- [x] Priority leagues: EPL, La Liga, Serie A, Bundesliga, Ligue 1, Champions League, Europa League, Scottish Prem, Six Nations, PRO14
+
+### Step 1c: Pick Matching (2026-02-25)
+- [x] `src/services/match_service.py` — three-tier matching:
+  1. Alias table lookup (team_aliases)
+  2. Fuzzy string matching (difflib)
+  3. LLM fallback (Groq — send pick + fixture list, ask to match)
+- [x] Best-effort enrichment in `pick_service.py` — never blocks pick submission
+- [x] `_try_enrich()` called on every pick submit, wrapped in try/except
+
+### Step 2: Auto-Resulting (2026-02-25)
+- [x] `src/services/auto_result_service.py`
+- [x] Handles win, BTTS, over/under, HT/FT bet types
+- [x] Checks matched picks against completed fixtures (API-Football scores)
+- [x] Records results, checks penalty streaks, builds butler-voiced announcements
+- [x] Scheduler jobs: Sun 8PM + Mon 10AM
+
+### Step 3: The Odds API (2026-02-25)
+- [x] `src/api/odds_api.py` — batch odds fetch with 2hr cache TTL
+- [x] Market price lookup on pick submission (wired into `_try_enrich()`)
+- [x] Logs remaining API quota from response headers
+- [x] Stores `market_price` alongside player-submitted odds
+
+### Config & Tests (2026-02-25)
+- [x] `API_FOOTBALL_KEY` and `ODDS_API_KEY` added to config.py and .env.example
+- [x] Test fixtures updated (conftest.py)
+- [x] 92 tests passing (up from 73)
+
+## Phase 3: Enhancements [PLANNED]
+
+### Bet Slip Reader
+- [ ] Bridge downloads image via `message.downloadMedia()`
+- [ ] Groq Vision extracts picks, odds, stake, return from bet slip screenshot
+- [ ] Populates `confirmed_odds` on matched picks
+- [ ] Stores image + aggregate data in `bet_slips` table
+
+### Other
+- [ ] **Match start validation** — warn on picks for matches already kicked off
 - [ ] Live score updates
-- [ ] Historical analytics
+- [ ] Historical analytics / Punter Wrapped
+- [ ] Web dashboard (low priority)
+
+---
+
+**Last Updated:** 2026-02-25
+**Status:** ✅ Phase 2 Complete — Structured data & API integration

@@ -3,7 +3,7 @@ import os
 import re
 
 import requests
-from flask import Flask, jsonify, request
+from flask import Flask, g, jsonify, request
 
 from src.config import Config
 from src.db import init_db, get_db
@@ -40,6 +40,11 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 
 
+def _get_group_id():
+    """Return the group_id for the current request (stored on Flask g)."""
+    return getattr(g, "group_id", "default") or "default"
+
+
 @app.before_request
 def log_request():
     if request.path != "/health":
@@ -63,6 +68,9 @@ def webhook():
     body = data.get("body", "")
     group_id = data.get("group_id", "")
     has_media = data.get("has_media", False)
+
+    # Store group_id on Flask g for request-scoped access by handlers
+    g.group_id = group_id
 
     # Only process messages from our group(s)
     allowed = Config.GROUP_CHAT_IDS if Config.GROUP_CHAT_IDS else ([Config.GROUP_CHAT_ID] if Config.GROUP_CHAT_ID else [])
@@ -196,7 +204,7 @@ def _cmd_stats(parsed, args):
 
 def _cmd_picks():
     """!picks — Show recorded picks for the current week."""
-    week = get_current_week()
+    week = get_current_week(group_id=_get_group_id())
     if not week:
         return "I have no active week at present. The season will commence when picks are collected, Thursday through Friday."
     picks = get_picks_for_week(week["id"])
@@ -281,7 +289,7 @@ def _cmd_override(parsed, args):
     if not target:
         return f"I'm afraid I don't recognise the player '{nickname}'."
 
-    week = get_current_week()
+    week = get_current_week(group_id=_get_group_id())
     if not week:
         return "No active week found."
 
@@ -314,7 +322,7 @@ def _handle_placer_bet_confirmation(sender, sender_phone, body=""):
         if override:
             sender = override
 
-    week = get_current_week()
+    week = get_current_week(group_id=_get_group_id())
     if not week:
         return None
 
@@ -341,7 +349,7 @@ def _cmd_resetweek(parsed):
     if not _is_authorized_admin(parsed):
         return "Only an admin may reset the week."
 
-    week = get_week_for_reset()
+    week = get_week_for_reset(group_id=_get_group_id())
     if not week:
         return "No week to reset. (No open/closed week, and no completed week this season.)"
 
@@ -417,7 +425,7 @@ def _cmd_status(parsed):
     if not _is_authorized_superadmin(parsed):
         return "This command is restricted."
 
-    week = get_current_week()
+    week = get_current_week(group_id=_get_group_id())
     week_info = f"Week {week['week_number']} ({week['status']})" if week else "No active week"
     picks_count = len(get_picks_for_week(week["id"])) if week else 0
     pending = get_pending_penalties()
@@ -462,7 +470,7 @@ def handle_cumulative_picks(cumulative):
         by_player[player["id"]] = (player, data)
     cumulative = list(by_player.values())
 
-    week = get_or_create_current_week()
+    week = get_or_create_current_week(group_id=_get_group_id())
     replies = []
 
     for player, data in cumulative:
@@ -515,7 +523,7 @@ def handle_pick(parsed):
         return None
 
     # Get or create the current week
-    week = get_or_create_current_week()
+    week = get_or_create_current_week(group_id=_get_group_id())
 
     data = parsed["parsed_data"]
     pick, is_update, _, previous_description = submit_pick(
@@ -572,7 +580,7 @@ def handle_result(parsed):
         return f"I don't recognise that player: {data['player_nickname']}."
 
     # Get the current week
-    week = get_current_week()
+    week = get_current_week(group_id=_get_group_id())
     if not week:
         return "My apologies, but there is no active week to record results against."
 

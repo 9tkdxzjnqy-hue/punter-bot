@@ -125,6 +125,97 @@ def _parse_framing(content):
         return _EMPTY_FRAMING
 
 
+def generate(context, scenario=None, player_name=None):
+    """
+    Generate a free-form text response from the butler persona.
+
+    Used by butler.py when the LLM should produce a full response (not just
+    opening/closing framing). Falls back to empty string on any failure,
+    which lets the caller use a template instead.
+
+    Args:
+        context:     Factual description or instruction for the LLM.
+        scenario:    Key matching a scenario in personality.yaml.
+        player_name: First name matching a player_profiles key.
+
+    Returns:
+        str — the LLM response text, or "" on failure.
+    """
+    if not Config.LLM_ENABLED or not Config.GROQ_API_KEY:
+        return ""
+
+    system_prompt = _build_system_prompt(scenario=scenario, player_name=player_name)
+    if not system_prompt:
+        return ""
+
+    # Override output format: plain text, not JSON framing
+    system_prompt += (
+        "\n\nIMPORTANT: For this response, reply with plain text only. "
+        "Do NOT return JSON. Write 1-2 sentences in character."
+    )
+
+    personality = _load_personality()
+    temperature = personality.get("temperature", 0.7)
+    max_tokens = personality.get("max_tokens", 120)
+    model = personality.get("model", "llama-3.3-70b-versatile")
+
+    try:
+        resp = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {Config.GROQ_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": context},
+                ],
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+            },
+            timeout=5,
+        )
+
+        if resp.status_code != 200:
+            logger.warning("Groq API returned %d: %s", resp.status_code, resp.text[:200])
+            return ""
+
+        data = resp.json()
+        content = data["choices"][0]["message"]["content"].strip()
+        # Strip any accidental JSON wrapping or code fences
+        content = re.sub(r"```(?:json)?\s*|\s*```", "", content).strip()
+        if content.startswith("{") and content.endswith("}"):
+            try:
+                parsed = json.loads(content)
+                # LLM returned framing JSON despite instructions — combine it
+                opening = str(parsed.get("opening", "")).strip()
+                closing = str(parsed.get("closing", "")).strip()
+                content = " ".join(filter(None, [opening, closing]))
+            except (json.JSONDecodeError, AttributeError):
+                pass
+        logger.info("LLM generate: %s", content[:120])
+        return content
+
+    except requests.Timeout:
+        logger.warning("Groq API timed out")
+        return ""
+    except Exception as e:
+        logger.warning("Groq API error: %s", e)
+        return ""
+
+
+def reset_persona():
+    """
+    Reset the LLM persona for a new week.
+
+    Currently a no-op — the butler character is stable across weeks.
+    Returns None so callers that check the return value handle it gracefully.
+    """
+    return None
+
+
 def get_framing(context, scenario=None, player_name=None):
     """
     Get opening and closing framing lines from the butler persona.

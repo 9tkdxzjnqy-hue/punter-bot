@@ -31,6 +31,8 @@ Pre-launch verification against requirements and deployment plan.
 - [ ] `ADMIN_PHONES` or `ADMIN_PHONE` = Ed's WhatsApp ID (format: `353XXXXXXXXX@c.us`)
 - [ ] `SUPERADMIN_PHONE` = your WhatsApp ID (for !myphone, !status)
 - [ ] `ROTATION_ORDER` = e.g. `Kev,Nialler,Nug,Pawn,DA,Ed` (matches the lads)
+- [ ] `API_FOOTBALL_KEY` = API-Football key ([sign up](https://www.api-football.com/), free: 100 req/day)
+- [ ] `ODDS_API_KEY` = The Odds API key ([sign up](https://the-odds-api.com/), free: 500 req/month)
 
 ### 2. Data Reset
 - [ ] Run `!resetseason` in the test group (or after switching to main) so next weekend = Week 1
@@ -76,8 +78,17 @@ If moving from test group to main:
 
 ---
 
-## Not Yet Implemented (Phase 2+)
+## Implemented but Not Yet Deployed (Phase 2)
 
-- Bet slip OCR (screenshot → odds/stake)
-- Oracle Cloud deployment
+- API-Football fixture caching + pick enrichment (sport, competition, event)
+- Three-tier pick matching (alias → fuzzy → LLM)
+- Auto-resulting from completed fixtures (win, BTTS, over/under, HT/FT)
+- The Odds API market price lookup on pick submission
+- Group isolation (test/main groups share DB safely)
+
+## Not Yet Implemented (Phase 3+)
+
+- Bet slip image reading (Groq Vision → odds/stake/return)
+- Match start validation (warn on picks for kicked-off matches)
 - DM reminders to missing players
+- Historical analytics / Punter Wrapped

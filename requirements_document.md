@@ -345,7 +345,7 @@ The LLM adds framing only — it never rewrites the structured content (picks li
 #### Shadow Mode
 - `SHADOW_GROUP_ID` in `.env` — mirrors main group messages to test group with LLM responses
 - Allows monitoring LLM output quality without risking main group
-- Currently requires fix to `_shadow_message()` in `app.py` (calls deprecated `llm_client.generate()`)
+- `_shadow_message()` fixed — calls working `llm_client.generate()`
 
 ---
 
@@ -371,17 +371,22 @@ The LLM adds framing only — it never rewrites the structured content (picks li
 - ✅ Week summary when all results in (results + leaderboard + next placer)
 - ✅ Butler LLM personality (framing architecture, live in main group)
 
-### Should-Have (Phase 2)
-- ⚡ Bet slip image reading (OCR)
-- ⚡ Fix shadow mode (`_shadow_message()`)
-- ⚡ Automatic result detection from APIs
-- ⚡ Leaderboard (!leaderboard command)
+### Should-Have (Phase 2 — Complete ✅)
+- ✅ Fix shadow mode (`_shadow_message()`)
+- ✅ API-Football integration (fixture caching, pick matching)
+- ✅ Automatic result detection from completed fixtures
+- ✅ The Odds API integration (market prices)
+- ✅ Group isolation (test/main groups share DB safely)
+- ✅ Pick enrichment (sport, competition, event, market type)
+
+### Should-Have (Phase 3)
+- ⚡ Bet slip image reading (Groq Vision)
 - ⚡ Historical trends & analytics
 - ⚡ Live score updates during matches
 
-### Could-Have (Phase 3+)
+### Could-Have (Phase 4+)
 - 💡 Odds movement alerts
-- 💡 Weekly/monthly reports
+- 💡 Weekly/monthly reports / Punter Wrapped
 - 💡 Export data features
 - 💡 Web dashboard
 - 💡 Rotating butler personas (architecture in place, single persona for now)
@@ -525,16 +530,20 @@ Sunday 6 PM - Result causes 5th consecutive loss
 - Shadow mode: needs fix to `_shadow_message()` before resuming
 - Rotating personas: architecture in place, single butler persona for now
 
-### Phase 2: Enhancements (Planned)
-- Fix shadow mode (`_shadow_message()` in `app.py`)
-- Bet slip image reading (OCR)
-- Historical analytics
+### Phase 2: Structured Data & API Integration ✅
+- Fixed broken LLM functions (`generate()`, `banter_reply()`, `reset_persona()`)
+- Group isolation (`group_id` on weeks table)
+- Schema extensions (7 enrichment columns on picks, fixtures + team_aliases tables)
+- API-Football integration (fixture caching, three-tier pick matching)
+- Auto-resulting (win, BTTS, over/under, HT/FT from completed fixtures)
+- The Odds API (market price lookup on pick submission)
+- 92 tests passing
 
-### Phase 3: Intelligence (Planned)
-- API integration (The Odds API, API-Football)
+### Phase 3: Enhancements (Planned)
+- Bet slip image reading (Groq Vision)
 - Match start validation — warn or void picks for matches already kicked off
-- Automatic result detection
 - Live score updates
+- Historical analytics / Punter Wrapped
 
 ### Phase 4: Refinement (Ongoing)
 - Bug fixes based on real usage
@@ -556,39 +565,51 @@ Node.js Bridge (whatsapp-web.js)
 Python Backend (Flask)
 ├── Message Parser
 ├── Pick Validator
-├── Result Tracker
+├── Result Tracker (manual + auto-resulting)
 ├── Penalty Engine
 ├── Rotation Manager
 ├── Stats Calculator
 ├── Butler (message formatter)
 │   ├── Templates (structured content)
 │   └── LLM framing (opening/closing lines via Groq)
-├── Image Reader (OCR — Phase 2)
+├── Pick Enrichment (best-effort, never blocks submission)
+│   ├── Fixture matching (alias → fuzzy → LLM)
+│   └── Market price lookup
+├── Image Reader (Groq Vision — Phase 3)
 └── Command Handler
         ↓
 SQLite Database
         ↓
-Sports APIs (Phase 3)
-├── The Odds API (free tier)
-└── API-Football (free tier)
+Sports APIs (Live)
+├── API-Football (free tier: 100 req/day)
+└── The Odds API (free tier: 500 req/month)
 ```
 
 ### Key Files
-- `src/app.py` — Flask app, webhook handler, routing
-- `src/butler.py` — All message formatting; templates + LLM framing
-- `src/llm_client.py` — Groq API wrapper; returns `{"opening": "...", "closing": "..."}`
+- `src/app.py` — Flask app, webhook handler, routing, group_id threading
+- `src/butler.py` — All message formatting; templates + LLM framing + banter
+- `src/llm_client.py` — Groq API wrapper; `get_framing()`, `generate()`, `reset_persona()`
 - `config/personality.yaml` — Butler character, player profiles, scenario guidance
 - `src/parsers/message_parser.py` — Pick, result, command parsing
+- `src/api/api_football.py` — API-Football v3 client with local file caching
+- `src/api/odds_api.py` — The Odds API client with 2hr cache TTL
+- `src/services/fixture_service.py` — Weekend fixture fetch + DB caching
+- `src/services/match_service.py` — Three-tier pick-to-fixture matching
+- `src/services/auto_result_service.py` — Auto-resulting from completed fixtures
 - `src/services/` — player, week, pick, result, penalty, rotation, stats services
-- `src/schema.sql` — SQLite schema (8 tables)
+- `src/schema.sql` — SQLite schema (10 tables)
 
 ### Data Model (Key Tables)
 
 **players** — id, name, nickname, formal_name, emoji, phone, rotation_position
 
-**weeks** — id, week_number, season, deadline, status, placer_id
+**weeks** — id, week_number, season, deadline, status, placer_id, group_id
 
-**picks** — id, week_id, player_id, description, odds_decimal, odds_original, bet_type, submitted_at, is_late
+**picks** — id, week_id, player_id, description, odds_decimal, odds_original, bet_type, submitted_at, is_late, sport, competition, event_name, market_type, api_fixture_id, market_price, confirmed_odds
+
+**fixtures** — id, api_id, sport, competition, competition_id, home_team, away_team, kickoff, status, home_score, away_score, ht_home_score, ht_away_score, fetched_at, raw_json
+
+**team_aliases** — id, alias (COLLATE NOCASE), canonical_name
 
 **results** — id, pick_id, outcome, score, confirmed_by, confirmed_at
 
@@ -654,35 +675,37 @@ Sports APIs (Phase 3)
 - [x] LLM framing architecture implemented (opening/closing only)
 - [x] `personality.yaml` as single config source
 - [x] Butler live in main group
-- [ ] Shadow mode working for monitoring LLM output
+- [x] Shadow mode working for monitoring LLM output
 - [ ] First full weekend run assessed and persona tuned
 
 ### Phase 2 Complete When:
-- [ ] Shadow mode fixed (`_shadow_message()` updated)
-- [ ] Bet slip images read and parsed
-- [ ] Odds, stake, return extracted from images
-- [ ] Manual fallback works when OCR fails
-- [ ] Historical stats track trends over time
+- [x] Shadow mode fixed (`_shadow_message()` updated)
+- [x] Group isolation — test/main groups share DB safely
+- [x] API-Football fixtures cached and picks matched to fixtures
+- [x] Auto-resulting from completed fixtures (win, BTTS, over/under, HT/FT)
+- [x] Market prices from The Odds API recorded alongside submitted odds
+- [x] Enrichment is best-effort — never blocks pick submission
+- [x] 92 tests passing
 
 ### Phase 3 Complete When:
-- [ ] API integration finds fixtures automatically
-- [ ] Results detected within 30 minutes of match end
-- [ ] 90% of results detected automatically
-- [ ] Fallback to manual works seamlessly
+- [ ] Bet slip images read and parsed (Groq Vision)
+- [ ] Odds, stake, return extracted from screenshots
+- [ ] `confirmed_odds` populated on matched picks
+- [ ] Manual fallback works when OCR fails
 
 ---
 
 ## 14. Next Steps
 
 ### Immediate (This Week)
-1. Monitor butler output in main group this weekend
-2. Fix `_shadow_message()` in `app.py` for shadow testing
-3. Note any tone/output issues for `personality.yaml` tuning
+1. Deploy Phase 2 changes to OCI server
+2. Configure `API_FOOTBALL_KEY` and `ODDS_API_KEY` in production `.env`
+3. Monitor enrichment + auto-resulting over first live weekend
 
-### Near Term (Phase 2)
-- Shadow mode restored
-- Bet slip OCR
-- Historical analytics
+### Near Term (Phase 3)
+- Bet slip image reading (Groq Vision)
+- Match start validation
+- Historical analytics / Punter Wrapped
 
 ---
 
@@ -780,13 +803,23 @@ Sports APIs (Phase 3)
 - `personality.yaml` rewritten: character, voice, player profiles, scenario guidance, output format
 - Friday reminder updated: 5PM → 7PM
 - `LLM_ENABLED=true` — butler live in main group
-- Shadow mode currently broken (`_shadow_message()` calls deprecated `llm_client.generate()`) — fix pending
 
-**Next Review:** After first weekend with butler live in main group
+**Version 0.20** — Phase 2: Structured Data & API Integration (2026-02-25)
+- Fixed broken LLM functions: `generate()`, `banter_reply()`, `reset_persona()`
+- Shadow mode fixed (`_shadow_message()` calls working `generate()`)
+- Group isolation: `group_id` on weeks table, test/main groups fully isolated
+- Schema extensions: 7 enrichment columns on picks, fixtures table, team_aliases table (50+ aliases)
+- API-Football v3: fixture caching (Wed 7:30PM), pick matching (alias → fuzzy → LLM)
+- Auto-resulting: win, BTTS, over/under, HT/FT from completed fixtures (Sun 8PM, Mon 10AM)
+- The Odds API: market price lookup on pick submission (best-effort, 2hr cache)
+- Three odds values per pick: player-submitted, market price, confirmed (bet slip — Phase 3)
+- 92 tests passing (up from 73)
+
+**Next Review:** After first weekend with API enrichment live
 
 ---
 
 **Document Owner:** You (Primary Admin)
 **Stakeholders:** Ed (Co-admin), The Lads (Users)
-**Last Updated:** 2026-02-23
-**Status:** ✅ Phase 1.5 Complete — Butler live in main group
+**Last Updated:** 2026-02-25
+**Status:** ✅ Phase 2 Complete — Structured data & API integration

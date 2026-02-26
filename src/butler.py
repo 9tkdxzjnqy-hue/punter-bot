@@ -261,7 +261,7 @@ def reminder_thursday():
         "Good evening, gentlemen.  May I remind you that picks are due "
         "by 10 PM Friday."
     )
-    return _frame(template, "Thursday evening reminder — picks due by Friday 10PM.",
+    return _frame(template, "Thursday evening reminder to the group.",
                   scenario="reminder_thursday")
 
 
@@ -272,7 +272,7 @@ def reminder_friday(missing):
         f"Pardon the interruption.  {_join_names(names)} \u2014 "
         f"3 hours remain to submit your selections."
     )
-    return _frame(template, f"Friday 7PM reminder — {_join_names(names)} still missing.",
+    return _frame(template, "Friday evening reminder to missing players.",
                   scenario="reminder_friday")
 
 
@@ -283,7 +283,7 @@ def reminder_final(missing):
         f"I do hope you'll forgive the urgency.  {_join_names(names)} \u2014 "
         f"30 minutes remain.  This is the final reminder."
     )
-    return _frame(template, f"Final warning — 30 minutes. {_join_names(names)} still missing.",
+    return _frame(template, "Final reminder before the deadline.",
                   scenario="reminder_final")
 
 

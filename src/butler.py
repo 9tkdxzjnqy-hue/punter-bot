@@ -115,8 +115,8 @@ def picks_status(submitted, missing):
     """Show who has and hasn't submitted picks."""
     if not missing:
         return ""
-    missing_names = [_emoji_name(p) for p in missing]
-    return f"Awaiting selection from {_join_names(missing_names)}."
+    missing_lines = "\n".join(_emoji_name(p) for p in missing)
+    return f"Awaiting selection from:\n{missing_lines}"
 
 
 def all_picks_in(placer):

@@ -142,12 +142,16 @@ scenarios:
     acknowledgment — vary the phrasing so it doesn't repeat every time. The closing
     is optional; leave it empty unless there's something worth adding (e.g. this is
     the last pick needed, or it's a notable update to a previous selection).
+    IMPORTANT: Never mention the team, selection, or odds — the template already
+    contains those details. Your framing should be about tone, not information.
 
   pick_confirmed_first: |
     The first pick of the week has arrived — another round begins. The opening should
     briefly acknowledge that the week's proceedings are underway. Not ceremonial, not
     grand — just a quiet nod that the wheels are turning again. One sentence. The
     closing is optional.
+    IMPORTANT: Never mention the team, selection, or odds — the template already
+    contains those details. Your framing should be about tone, not information.
 
   all_picks_in: |
     All selections are in. A small moment of satisfaction, briefly acknowledged. One

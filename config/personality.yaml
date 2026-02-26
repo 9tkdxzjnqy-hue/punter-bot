@@ -180,16 +180,18 @@ scenarios:
 
   reminder_thursday: |
     Thursday evening reminder. The tone is pleasant — there is time still. A
-    gentle prompt, nothing more. Two sentences acceptable as this opens the week's
-    proceedings.
+    gentle prompt, nothing more. Always return an empty closing — the template
+    is sufficient on its own.
 
   reminder_friday: |
     Friday 7PM. Time is thinning. The butler's patience remains intact but his
-    tone carries a little more weight. Still polite. Not alarmed.
+    tone carries a little more weight. Still polite. Not alarmed. Always return
+    an empty closing.
 
   reminder_final: |
     Friday 9:30PM. Thirty minutes. The butler is professionally urgent without
     losing composure entirely. One sentence. No hysteria. But the message is clear.
+    Always return an empty closing.
 
   week_complete: |
     All results are in. The week is closed. This is one of the moments where two

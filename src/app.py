@@ -498,15 +498,24 @@ def handle_cumulative_picks(cumulative):
             if first_of_week:
                 first_pick_used = True
             replies.append(
-                butler.pick_confirmed(
-                    player, data["description"], data["odds_original"], is_update,
-                    placer=placer, previous_description=previous_description,
-                    first_of_week=first_of_week,
-                )
+                (player, data, is_update, placer, previous_description, first_of_week)
             )
 
-    # Add status for missing players
+    # Check if all picks are now in — flag the last reply to skip LLM framing
     missing = get_missing_players(week["id"])
+    last_pick = not missing and all_picks_in(week["id"])
+
+    confirmed_replies = []
+    for i, (player, data, is_update, placer, previous_description, first_of_week) in enumerate(replies):
+        is_last = last_pick and i == len(replies) - 1
+        confirmed_replies.append(
+            butler.pick_confirmed(
+                player, data["description"], data["odds_original"], is_update,
+                placer=placer, previous_description=previous_description,
+                first_of_week=first_of_week, last_pick=is_last,
+            )
+        )
+    replies = confirmed_replies
     if missing:
         replies.append(butler.picks_status(None, missing))
     elif all_picks_in(week["id"]):
@@ -559,17 +568,18 @@ def handle_pick(parsed):
     # Build confirmation reply (single-pick always confirms)
     placer = get_next_placer() if data["odds_original"] == "placer" else None
     first_of_week = not is_update and len(get_picks_for_week(week["id"])) == 1
+    missing = get_missing_players(week["id"])
+    last_pick = not missing and all_picks_in(week["id"])
     reply = butler.pick_confirmed(
         player, data["description"], data["odds_original"], is_update,
         placer=placer, previous_description=previous_description,
-        first_of_week=first_of_week,
+        first_of_week=first_of_week, last_pick=last_pick,
     )
 
     # Check who's still missing
-    missing = get_missing_players(week["id"])
     if missing:
         reply += "\n" + butler.picks_status(None, missing)
-    elif all_picks_in(week["id"]):
+    elif last_pick:
         # All picks are in — announce the placer with summary
         placer = get_next_placer()
         picks = get_picks_for_week(week["id"])

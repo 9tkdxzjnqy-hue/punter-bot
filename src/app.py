@@ -649,11 +649,12 @@ def handle_result(parsed):
     # Check if the accumulator is already dead (any loss this week)
     week_results = get_week_results(week["id"])
     acca_lost = any(r["outcome"] == "loss" for r in week_results)
+    losers = [r["formal_name"] for r in week_results if r["outcome"] == "loss"]
 
     # Build announcement
     reply = butler.result_announced(
         target_player, pick["description"], pick["odds_original"], data["outcome"],
-        streak=streak_str, acca_lost=acca_lost,
+        streak=streak_str, acca_lost=acca_lost, losers=losers,
     )
     penalty_thresholds = {3: "streak_3", 5: "streak_5", 7: "streak_7", 10: "streak_10"}
     penalty_amounts = {3: 0, 5: 50, 7: 100, 10: 200}

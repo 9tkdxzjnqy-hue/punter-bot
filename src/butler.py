@@ -206,7 +206,7 @@ def bet_slip_received(player):
     return f"Thank you, {player['formal_name']}.  Bet slip received and recorded."
 
 
-def result_announced(player, description, odds, outcome, streak=None, acca_lost=False):
+def result_announced(player, description, odds, outcome, streak=None, acca_lost=False, losers=None):
     """Announce a result."""
     formal = _formalize_pick(description)
     display_text = _strip_odds_for_display(formal) if odds != "placer" else formal
@@ -214,13 +214,21 @@ def result_announced(player, description, odds, outcome, streak=None, acca_lost=
     if outcome == "win":
         verdict = "\u2705 Winner."
         prefix = "I'm pleased to report"
-        scenario = "result_win"
+        scenario = "result_win_acca_lost" if acca_lost else "result_win"
     elif outcome == "loss":
         verdict = "\u274c Lost."
         prefix = "I'm afraid"
         if streak and streak.endswith("L"):
             streak_num = int(streak[:-1])
-            scenario = f"result_streak_{streak_num}" if streak_num in (3, 5, 7) else "result_loss"
+            # Streak scenarios take priority over acca_lost
+            if streak_num in (3, 5, 7):
+                scenario = f"result_streak_{streak_num}"
+            elif acca_lost:
+                scenario = "result_loss_acca_lost"
+            else:
+                scenario = "result_loss"
+        elif acca_lost:
+            scenario = "result_loss_acca_lost"
         else:
             scenario = "result_loss"
     else:
@@ -234,8 +242,8 @@ def result_announced(player, description, odds, outcome, streak=None, acca_lost=
     )
 
     streak_ctx = f" ({streak} streak)" if streak else ""
-    if acca_lost:
-        acca_ctx = " The group's accumulator has already lost for the week."
+    if acca_lost and losers:
+        acca_ctx = f" The accumulator fell on {_join_names(losers)}'s selections."
     else:
         acca_ctx = ""
     context = f"{player['formal_name']}'s pick {outcome}: {display_text} @ {odds}.{streak_ctx}{acca_ctx}"

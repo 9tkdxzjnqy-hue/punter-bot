@@ -203,6 +203,7 @@ def schedule_match_monitor(fixture_api_id, kickoff_iso, week_id):
         run_date=start_time,
         args=[fixture_api_id, week_id, 0],
         id=job_id,
+        misfire_grace_time=300,
     )
     logger.info("Scheduled monitor for fixture %s at %s (week %s)",
                 fixture_api_id, start_time.isoformat(), week_id)
@@ -283,6 +284,7 @@ def _job_monitor_fixture(fixture_api_id, week_id, poll_count):
             args=[fixture_api_id, week_id, next_count],
             id=job_id,
             replace_existing=True,
+            misfire_grace_time=300,
         )
         logger.debug("Next poll for fixture %s at %s (poll #%d)",
                       fixture_api_id, next_poll.isoformat(), next_count)

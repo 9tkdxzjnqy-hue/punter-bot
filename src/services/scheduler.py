@@ -94,15 +94,37 @@ def init_scheduler(send_message_fn):
         id="close_week",
     )
 
-    # Daily 7:30PM (Wed–Sun) — fetch tomorrow's fixtures from API-Football
-    # Free plan only allows today ± 1 day, so we fetch daily
+    # Fixture fetches — optimised for free plan (today ± 1 day)
+    # Each run fetches today + tomorrow, so timing determines which days we cover.
+    # Thu 7PM:  Thu+Fri  — Friday fixtures ready when picks arrive
+    # Fri 11AM: Fri+Sat  — Saturday fixtures ready early for pick matching
+    # Fri 9:30PM: refresh — final re-enrichment sweep before deadline
+    # Sat 8AM:  Sat+Sun  — Sunday fixtures ready first thing
+    # Sun 8AM:  Sun+Mon  — Monday fixtures ready early
     _scheduler.add_job(
-        _job_fetch_fixtures,
-        "cron",
-        day_of_week="wed,thu,fri,sat,sun",
-        hour=19,
-        minute=30,
-        id="fetch_fixtures",
+        _job_fetch_fixtures, "cron",
+        day_of_week="thu", hour=19, minute=0,
+        id="fetch_fixtures_thu",
+    )
+    _scheduler.add_job(
+        _job_fetch_fixtures, "cron",
+        day_of_week="fri", hour=11, minute=0,
+        id="fetch_fixtures_fri_am",
+    )
+    _scheduler.add_job(
+        _job_fetch_fixtures, "cron",
+        day_of_week="fri", hour=21, minute=30,
+        id="fetch_fixtures_fri_pm",
+    )
+    _scheduler.add_job(
+        _job_fetch_fixtures, "cron",
+        day_of_week="sat", hour=8, minute=0,
+        id="fetch_fixtures_sat",
+    )
+    _scheduler.add_job(
+        _job_fetch_fixtures, "cron",
+        day_of_week="sun", hour=8, minute=0,
+        id="fetch_fixtures_sun",
     )
 
     # Monday 10AM — safety sweep auto-result (catches anything missed)

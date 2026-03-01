@@ -51,6 +51,11 @@ SPORT_CONFIG = {
         "api_key_attr": "API_MMA_KEY",
         "priority_leagues": [],
     },
+    "formula1": {
+        "base_url": "https://v1.formula-1.api-sports.io",
+        "api_key_attr": "API_F1_KEY",
+        "priority_leagues": [],
+    },
 }
 
 

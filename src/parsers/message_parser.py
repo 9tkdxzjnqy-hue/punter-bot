@@ -106,6 +106,14 @@ SPORT_KEYWORDS = {
         r"world\s*darts|180s?\s*over)\b",
         re.IGNORECASE,
     ),
+    "formula1": re.compile(
+        r"\b(f1|formula\s*1|formula\s*one|grand\s*prix|gp|"
+        r"red\s*bull|ferrari|mclaren|mercedes|alpine|aston\s*martin|"
+        r"williams|haas|rb|sauber|kick\s*sauber|"
+        r"verstappen|hamilton|leclerc|norris|piastri|sainz|russell|"
+        r"alonso|stroll|gasly|ocon|tsunoda|hulkenberg)\b",
+        re.IGNORECASE,
+    ),
 }
 
 # GAA county classification for two-step sport detection

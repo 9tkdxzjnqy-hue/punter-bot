@@ -42,5 +42,6 @@ class Config:
     API_NBA_KEY = os.getenv("API_NBA_KEY", "")
     API_NHL_KEY = os.getenv("API_NHL_KEY", "")
     API_MMA_KEY = os.getenv("API_MMA_KEY", "")
+    API_F1_KEY = os.getenv("API_F1_KEY", "")
     # The Odds API (free tier: 500 req/month)
     ODDS_API_KEY = os.getenv("ODDS_API_KEY", "")

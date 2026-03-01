@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS players (
     emoji TEXT,
     phone TEXT,
     rotation_position INTEGER NOT NULL,
+    aliases TEXT DEFAULT '',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

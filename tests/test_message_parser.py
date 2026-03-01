@@ -163,6 +163,13 @@ class TestResultParsing:
         result = parse_message("\u265f\ufe0f\u274c", "Ed")
         assert result["type"] != "result"
 
+    def test_double_loss_emoji(self):
+        """'Don ❌❌' should parse as a loss result for player 'don'."""
+        result = parse_message("Don ❌❌", "Ed")
+        assert result["type"] == "result"
+        assert result["parsed_data"]["player_nickname"] == "don"
+        assert result["parsed_data"]["outcome"] == "loss"
+
     def test_text_nickname_still_preferred_over_emoji(self):
         """Text nickname match takes priority over emoji match."""
         emoji_map = {"\u265f\ufe0f": {"nickname": "pawn", "formal_name": "Mr Aidan"}}

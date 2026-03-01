@@ -34,6 +34,12 @@ def lookup_player(sender_phone="", sender_name=""):
             ):
                 return dict(player)
 
+        # Check aliases (comma-separated, e.g. "don,dec")
+        for player in players:
+            aliases = [a.strip().lower() for a in (player["aliases"] or "").split(",") if a.strip()]
+            if name_lower in aliases:
+                return dict(player)
+
     conn.close()
     return None
 

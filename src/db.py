@@ -27,6 +27,7 @@ def init_db():
 
     _run_migrations(conn)
     seed_players(conn)
+    seed_player_aliases(conn)
     seed_team_aliases(conn)
     conn.close()
 
@@ -37,6 +38,7 @@ def _run_migrations(conn):
     _migrate_picks_enrichment(conn)
     _migrate_fixture_events(conn)
     _migrate_team_aliases_sport(conn)
+    _migrate_players_aliases(conn)
 
 
 def _column_exists(conn, table, column):
@@ -133,6 +135,14 @@ def _migrate_team_aliases_sport(conn):
         ALTER TABLE team_aliases_new RENAME TO team_aliases;
         PRAGMA foreign_keys = ON;
     """)
+    conn.commit()
+
+
+def _migrate_players_aliases(conn):
+    """Add aliases column to players table."""
+    if _column_exists(conn, "players", "aliases"):
+        return
+    conn.execute("ALTER TABLE players ADD COLUMN aliases TEXT DEFAULT ''")
     conn.commit()
 
 
@@ -253,6 +263,15 @@ def seed_team_aliases(conn):
     conn.executemany(
         "INSERT OR IGNORE INTO team_aliases (alias, canonical_name, sport) VALUES (?, ?, ?)",
         rows,
+    )
+    conn.commit()
+
+
+def seed_player_aliases(conn):
+    """Seed known player aliases (idempotent — only updates empty aliases)."""
+    conn.execute(
+        "UPDATE players SET aliases = ? WHERE nickname = ? AND (aliases IS NULL OR aliases = '')",
+        ("don", "DA"),
     )
     conn.commit()
 

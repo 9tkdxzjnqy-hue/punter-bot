@@ -500,6 +500,73 @@ def _emoji_name(player):
     return f"{prefix}{player['formal_name']}"
 
 
+def _early_kickoff_note(kickoff_str):
+    """Return early-kickoff warning if fixture is before Sat 12:30 PM Dublin time, else None."""
+    if not kickoff_str:
+        return None
+    tz = pytz.timezone("Europe/Dublin")
+    try:
+        dt = datetime.fromisoformat(kickoff_str) if isinstance(kickoff_str, str) else kickoff_str
+    except (ValueError, TypeError):
+        return None
+    if dt.tzinfo is None:
+        dt = pytz.utc.localize(dt)
+    dt_local = dt.astimezone(tz)
+
+    # Any kickoff Wed/Thu/Fri or Sat before 12:30 PM is "early"
+    if dt_local.weekday() == 5:
+        # Saturday — only early if before 12:30
+        cutoff = dt_local.replace(hour=12, minute=30, second=0, microsecond=0)
+        if dt_local >= cutoff:
+            return None
+    elif dt_local.weekday() in (0, 1, 6):
+        # Sun/Mon/Tue — not in the pick window, not early
+        return None
+    # Wed/Thu/Fri or Sat before 12:30 → early
+
+    day_name = dt_local.strftime("%A")
+    time_str = dt_local.strftime("%-I:%M %p")
+    return f"\u26a0\ufe0f This kicks off {day_name} at {time_str} — all picks and the bet must be in before then."
+
+
+def earliest_kickoff_warning(picks_with_kickoff):
+    """If any pick has an early kickoff, warn about the effective deadline."""
+    if not picks_with_kickoff:
+        return None
+    tz = pytz.timezone("Europe/Dublin")
+    earliest_dt = None
+    for pick in picks_with_kickoff:
+        ko = pick.get("kickoff")
+        if not ko:
+            continue
+        try:
+            dt = datetime.fromisoformat(ko) if isinstance(ko, str) else ko
+        except (ValueError, TypeError):
+            continue
+        if dt.tzinfo is None:
+            dt = pytz.utc.localize(dt)
+        dt_local = dt.astimezone(tz)
+
+        # Check if this kickoff counts as "early" (before Sat 12:30 PM)
+        is_early = False
+        if dt_local.weekday() == 5:
+            cutoff = dt_local.replace(hour=12, minute=30, second=0, microsecond=0)
+            is_early = dt_local < cutoff
+        elif dt_local.weekday() in (2, 3, 4):
+            # Wed/Thu/Fri — always early
+            is_early = True
+
+        if is_early and (earliest_dt is None or dt_local < earliest_dt):
+            earliest_dt = dt_local
+
+    if earliest_dt is None:
+        return None
+
+    day_name = earliest_dt.strftime("%A")
+    time_str = earliest_dt.strftime("%-I:%M %p")
+    return f"\u26a0\ufe0f Earliest kickoff is {day_name} at {time_str} — all picks must be in before then."
+
+
 def match_event(event_type, home_team, away_team, home_score, away_score, player_name, minute, detail=None):
     """Format a live match event (goal or red card) for posting."""
     score = f"{home_team} {home_score}-{away_score} {away_team}"

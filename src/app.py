@@ -19,6 +19,7 @@ from src.services.pick_service import (
     submit_pick, get_missing_players, all_picks_in, get_player_pick, get_picks_for_week,
     get_picks_for_week_by_kickoff,
 )
+from src.services.fixture_service import get_fixture_by_api_id
 from src.services.result_service import (
     record_result, get_consecutive_losses, all_results_in as all_results_complete,
     get_week_results, override_result,
@@ -524,6 +525,11 @@ def handle_cumulative_picks(cumulative):
     replies = confirmed_replies
     if missing:
         replies.append(butler.picks_status(None, missing))
+        # Earliest kickoff warning across all picks
+        week_picks = get_picks_for_week_by_kickoff(week["id"])
+        warning = butler.earliest_kickoff_warning(week_picks)
+        if warning:
+            replies.append(warning)
     elif all_picks_in(week["id"]):
         placer = get_next_placer()
         picks = get_picks_for_week_by_kickoff(week["id"])
@@ -585,9 +591,22 @@ def handle_pick(parsed):
         sport_clarification=clarification,
     )
 
+    # Individual early kickoff warning for this pick
+    if pick.get("api_fixture_id"):
+        fixture = get_fixture_by_api_id(pick["api_fixture_id"])
+        if fixture:
+            note = butler._early_kickoff_note(fixture.get("kickoff"))
+            if note:
+                reply += "\n\n" + note
+
     # Check who's still missing
     if missing:
         reply += "\n" + butler.picks_status(None, missing)
+        # Earliest kickoff warning across all picks
+        week_picks = get_picks_for_week_by_kickoff(week["id"])
+        warning = butler.earliest_kickoff_warning(week_picks)
+        if warning:
+            reply += "\n\n" + warning
     elif last_pick:
         # All picks are in — announce the placer with summary
         placer = get_next_placer()

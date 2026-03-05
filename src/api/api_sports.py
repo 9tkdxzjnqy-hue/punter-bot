@@ -60,11 +60,15 @@ SPORT_CONFIG = {
 
 
 def _get_api_key(sport):
-    """Get the API key for a sport from config. Returns empty string if not set."""
+    """Get the API key for a sport from config.
+
+    Tries the sport-specific key first, then falls back to the shared
+    API_FOOTBALL_KEY (api-sports.io uses a single key across all sports).
+    """
     config = SPORT_CONFIG.get(sport)
     if not config:
         return ""
-    return getattr(Config, config["api_key_attr"], "")
+    return getattr(Config, config["api_key_attr"], "") or Config.API_FOOTBALL_KEY
 
 
 def is_configured(sport):

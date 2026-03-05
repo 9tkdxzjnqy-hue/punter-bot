@@ -109,9 +109,18 @@ def _try_enrich(description, bet_type, sport="football", include_started=False):
     try:
         from src.services.match_service import match_pick
         result = match_pick(description, bet_type, sport=sport, include_started=include_started)
+
+        # Cross-sport fallback: if the default sport found no match, search all fixtures
+        if not result and sport == "football":
+            result = match_pick(description, bet_type, sport=None, include_started=include_started)
+            if result:
+                logger.info("Cross-sport fallback matched: %s → %s (%s)",
+                            description[:40], result.get("event_name", "?"), result.get("sport", "?"))
+
         if result:
             logger.info("Enriched pick: %s → %s", description[:40], result.get("event_name", "?"))
             # Try to get market price from The Odds API
+            enriched_sport = result.get("sport") or sport
             try:
                 from src.api.odds_api import get_best_odds_for_selection
                 from src.services.match_service import _extract_team_names
@@ -120,7 +129,7 @@ def _try_enrich(description, bet_type, sport="football", include_started=False):
                     price = get_best_odds_for_selection(
                         result["event_name"], teams[0],
                         competition=result.get("competition"),
-                        sport=sport,
+                        sport=enriched_sport,
                     )
                     if price:
                         result["market_price"] = price
@@ -191,7 +200,7 @@ def re_enrich_unmatched_picks(week_id):
     """
     conn = get_db()
     unmatched = conn.execute(
-        "SELECT id, description, bet_type FROM picks "
+        "SELECT id, description, bet_type, sport FROM picks "
         "WHERE week_id = ? AND api_fixture_id IS NULL",
         (week_id,),
     ).fetchall()
@@ -202,7 +211,8 @@ def re_enrich_unmatched_picks(week_id):
 
     enriched = 0
     for pick in unmatched:
-        enrichment = _try_enrich(pick["description"], pick["bet_type"], include_started=True)
+        enrichment = _try_enrich(pick["description"], pick["bet_type"],
+                                 sport=pick["sport"] or "football", include_started=True)
         if enrichment.get("api_fixture_id"):
             conn = get_db()
             conn.execute(

@@ -1,5 +1,8 @@
 """Tests for pick_service."""
 
+from datetime import datetime, timedelta
+
+from src.db import get_db
 from src.services.pick_service import (
     submit_pick, get_picks_for_week, get_missing_players, all_picks_in, get_player_pick,
 )
@@ -110,3 +113,67 @@ class TestGetPicks:
 
         pick = get_player_pick(week["id"], players[0]["id"])
         assert pick is None
+
+
+class TestCrossSportFallback:
+    """Cross-sport fixture fallback: football-default picks match non-football fixtures."""
+
+    def _insert_fixture(self, sport, home_team, away_team, api_id=99999):
+        """Insert a fixture into the DB for matching."""
+        conn = get_db()
+        kickoff = (datetime.utcnow() + timedelta(days=1)).isoformat()
+        conn.execute(
+            """INSERT OR REPLACE INTO fixtures
+               (api_id, sport, competition, home_team, away_team,
+                kickoff, status, fetched_at, raw_json)
+               VALUES (?, ?, ?, ?, ?, ?, 'NS', ?, '{}')""",
+            (api_id, sport, "Six Nations", home_team, away_team,
+             kickoff, datetime.utcnow().isoformat()),
+        )
+        conn.commit()
+        conn.close()
+
+    def test_football_default_matches_rugby_fixture(self):
+        """A pick like 'Ireland -26' defaults to football, but should match a rugby fixture."""
+        self._insert_fixture("rugby", "Ireland", "Italy")
+
+        week = get_or_create_current_week()
+        players = get_all_players()
+        player = players[0]
+
+        pick, _, _, _ = submit_pick(
+            player_id=player["id"],
+            week_id=week["id"],
+            description="Ireland",
+            odds_decimal=1.5,
+            odds_original="1/2",
+            bet_type="handicap",
+            sport="football",  # default detection
+        )
+
+        assert pick["sport"] == "rugby"
+        assert pick["api_fixture_id"] == 99999
+        assert pick["event_name"] == "Ireland vs Italy"
+
+    def test_no_fallback_when_football_matches(self):
+        """When a football fixture matches, no cross-sport fallback needed."""
+        self._insert_fixture("football", "Ireland", "Wales", api_id=11111)
+        self._insert_fixture("rugby", "Ireland", "Italy", api_id=22222)
+
+        week = get_or_create_current_week()
+        players = get_all_players()
+        player = players[0]
+
+        pick, _, _, _ = submit_pick(
+            player_id=player["id"],
+            week_id=week["id"],
+            description="Ireland",
+            odds_decimal=2.0,
+            odds_original="evens",
+            bet_type="win",
+            sport="football",
+        )
+
+        # Should match the football fixture, not the rugby one
+        assert pick["sport"] == "football"
+        assert pick["api_fixture_id"] == 11111

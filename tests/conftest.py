@@ -24,11 +24,6 @@ def test_db(monkeypatch):
     monkeypatch.setattr("src.config.Config.LLM_ENABLED", False)
     monkeypatch.setattr("src.config.Config.GROQ_API_KEY", "")
     monkeypatch.setattr("src.config.Config.API_FOOTBALL_KEY", "")
-    monkeypatch.setattr("src.config.Config.API_RUGBY_KEY", "")
-    monkeypatch.setattr("src.config.Config.API_NFL_KEY", "")
-    monkeypatch.setattr("src.config.Config.API_NBA_KEY", "")
-    monkeypatch.setattr("src.config.Config.API_NHL_KEY", "")
-    monkeypatch.setattr("src.config.Config.API_MMA_KEY", "")
     monkeypatch.setattr("src.config.Config.ODDS_API_KEY", "")
 
     from src.db import init_db

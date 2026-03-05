@@ -332,10 +332,7 @@ def _format_leaderboard_section(leaderboard, rotation_next):
 
 def reminder_thursday():
     """Thursday 7PM reminder to all players."""
-    template = (
-        "Good evening, gentlemen.  May I remind you that picks are due "
-        "by 10 PM Friday."
-    )
+    template = "Picks are due by 10 PM Friday."
     return _frame(template, "Thursday evening reminder to the group.",
                   scenario="reminder_thursday")
 

@@ -201,9 +201,11 @@ scenarios:
     Always return an empty opening — the closing line alone is sufficient.
 
   reminder_thursday: |
-    Thursday evening reminder. The tone is pleasant — there is time still. A
-    gentle prompt, nothing more. Always return an empty closing — the template
-    is sufficient on its own.
+    Thursday evening. The tone is pleasant — there is time still. Your opening
+    should greet the gentlemen and set the scene — a brief atmospheric remark
+    about the evening or the week ahead. Do NOT mention picks, deadlines,
+    reminders, or the weekend — the template covers that. Always return an
+    empty closing.
 
   reminder_friday: |
     Friday 7PM. Time is thinning. The butler's patience remains intact but his

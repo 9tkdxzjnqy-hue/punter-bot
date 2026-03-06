@@ -227,12 +227,15 @@ def _normalize_team_sport(sport, fixture_data):
     """Normalize a team sport (rugby/NFL/NBA/NHL) fixture."""
     # API-Sports team sport responses follow a similar structure:
     # {game/id, league, teams: {home, away}, scores}
+    # Some sports nest under "game" or "fixture"; rugby has fields at top level
     game = fixture_data.get("game", fixture_data.get("fixture", {}))
+    if not game or not isinstance(game, dict) or not game.get("id"):
+        game = fixture_data
     league = fixture_data.get("league", {})
     teams = fixture_data.get("teams", {})
     scores = fixture_data.get("scores", fixture_data.get("goals", {}))
 
-    api_id = game.get("id") if isinstance(game, dict) else fixture_data.get("id")
+    api_id = game.get("id")
     if not api_id:
         return None
 

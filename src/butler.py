@@ -88,8 +88,9 @@ def _strip_odds_for_display(text):
     if not text:
         return text
     # Strip fractional odds (6/10, 21/20), decimal (2.0, 3.75), evens
+    # Negative lookbehind: don't strip decimals preceded by +/- (handicaps like -10.5)
     text = re.sub(r"\b\d+/\d+\b", "", text, flags=re.IGNORECASE)
-    text = re.sub(r"\b\d+\.\d{1,2}\b", "", text)
+    text = re.sub(r"(?<![+-])\b\d+\.\d{1,2}\b", "", text)
     text = re.sub(r"\bevens?\b", "", text, flags=re.IGNORECASE)
     return re.sub(r"\s+", " ", text).strip().rstrip(".,")
 

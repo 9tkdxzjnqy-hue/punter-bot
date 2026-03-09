@@ -118,23 +118,57 @@ def complete_week(week_id):
     conn.close()
 
 
-def is_within_submission_window():
+def is_within_submission_window(group_id="default"):
     """
     Check if we're in the pick submission window.
-    Wednesday 7PM -> Friday 10PM (configured timezone).
+
+    The window is open when EITHER:
+    1. We're in the normal Wed 7PM → Fri 10PM window, OR
+    2. The most recent week is completed (all results in) — picks for
+       the next week are accepted immediately, OR
+    3. A week was opened early and its deadline hasn't passed yet.
     """
     now = _now()
     weekday = now.weekday()  # 0=Mon, 2=Wed, 4=Fri
 
-    # Wednesday after 7PM
+    # 1. Normal time window: Wed 7PM → Fri 10PM
     if weekday == 2 and now.hour >= 19:
         return True
-    # Thursday or Friday before 10PM
     if weekday in (3, 4):
         if weekday == 4 and now.hour >= 22:
-            return False
+            pass  # Don't return False yet — check DB status below
+        else:
+            return True
+
+    # 2. Check DB for early opening
+    conn = get_db()
+    latest = conn.execute(
+        "SELECT status, deadline FROM weeks WHERE group_id = ? ORDER BY id DESC LIMIT 1",
+        (group_id,),
+    ).fetchone()
+    conn.close()
+
+    if latest is None:
+        return True  # No weeks exist yet
+
+    if latest["status"] == "completed":
+        return True  # All results in — next week open
+
+    if latest["status"] == "open":
+        # Week was opened early — accept picks until its deadline
+        if latest["deadline"]:
+            try:
+                deadline = datetime.fromisoformat(latest["deadline"])
+                tz = pytz.timezone(Config.TIMEZONE)
+                if deadline.tzinfo is None:
+                    deadline = tz.localize(deadline)
+                if now > deadline:
+                    return False
+            except (ValueError, TypeError):
+                pass
         return True
 
+    # status == 'closed' — results pending
     return False
 
 

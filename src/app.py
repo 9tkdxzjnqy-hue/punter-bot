@@ -486,9 +486,9 @@ def handle_cumulative_picks(cumulative):
     When a player appears multiple times, only the LAST occurrence is used (so a
     replacement pick at the end of the thread wins over an earlier line).
     """
-    if not Config.TEST_MODE and not is_within_submission_window():
+    if not Config.TEST_MODE and not is_within_submission_window(_get_group_id()):
         logger.info("Cumulative picks ignored — outside submission window")
-        return None
+        return "The submission window is currently closed — picks are accepted from Wednesday 7pm to Friday 10pm."
 
     # Deduplicate by player: keep last occurrence (replacement pick wins)
     by_player = {}
@@ -561,9 +561,9 @@ def handle_cumulative_picks(cumulative):
 def handle_pick(parsed):
     """Process a pick submission."""
     # Only accept picks during the submission window (bypass in test mode)
-    if not Config.TEST_MODE and not is_within_submission_window():
+    if not Config.TEST_MODE and not is_within_submission_window(_get_group_id()):
         logger.info("Pick ignored — outside submission window")
-        return None
+        return "The submission window is currently closed — picks are accepted from Wednesday 7pm to Friday 10pm."
 
     # Look up the player
     player = lookup_player(

@@ -34,7 +34,7 @@ class TestCumulativePickWebhook:
         _seed_player_emojis()
         monkeypatch.setattr(
             "src.app.is_within_submission_window",
-            lambda: True,
+            lambda group_id="default": True,
         )
         monkeypatch.setattr(
             "src.config.Config.GROUP_CHAT_ID",
@@ -85,7 +85,7 @@ class TestCumulativePickWebhook:
     def test_cumulative_only_acknowledges_new_picks(self, test_db, monkeypatch):
         """When adding a pick to an existing thread, only acknowledge the new pick."""
         _seed_player_emojis()
-        monkeypatch.setattr("src.app.is_within_submission_window", lambda: True)
+        monkeypatch.setattr("src.app.is_within_submission_window", lambda group_id="default": True)
         monkeypatch.setattr("src.config.Config.GROUP_CHAT_ID", "test-group@g.us")
 
         from src.app import create_app
@@ -154,7 +154,7 @@ class TestCumulativePickWebhook:
     def test_cumulative_accepts_bare_team_names(self, test_db, monkeypatch):
         """Bare team names like 'Villa' in cumulative format are accepted (emoji = pick context)."""
         _seed_player_emojis()
-        monkeypatch.setattr("src.app.is_within_submission_window", lambda: True)
+        monkeypatch.setattr("src.app.is_within_submission_window", lambda group_id="default": True)
         monkeypatch.setattr("src.config.Config.GROUP_CHAT_ID", "test-group@g.us")
 
         from src.app import create_app
@@ -201,7 +201,7 @@ class TestCumulativePickWebhook:
     def test_cumulative_replacement_pick_detected(self, test_db, monkeypatch):
         """When changing pick (e.g. Dortmund -> Villa), cumulative message updates correctly."""
         _seed_player_emojis()
-        monkeypatch.setattr("src.app.is_within_submission_window", lambda: True)
+        monkeypatch.setattr("src.app.is_within_submission_window", lambda group_id="default": True)
         monkeypatch.setattr("src.config.Config.GROUP_CHAT_ID", "test-group@g.us")
 
         from src.app import create_app
@@ -247,7 +247,7 @@ class TestCumulativePickWebhook:
     def test_placer_screenshot_records_bet_placed(self, test_db, monkeypatch):
         """When next placer posts a screenshot (all picks in), record bet as placed."""
         _seed_player_emojis()
-        monkeypatch.setattr("src.app.is_within_submission_window", lambda: True)
+        monkeypatch.setattr("src.app.is_within_submission_window", lambda group_id="default": True)
         monkeypatch.setattr("src.config.Config.GROUP_CHAT_ID", "test-group@g.us")
 
         from src.app import create_app
@@ -302,7 +302,7 @@ class TestCumulativePickWebhook:
     def test_placer_text_confirmation_records_bet_placed(self, test_db, monkeypatch):
         """When next placer posts text like 'placed' or 'bet slip' (no media), also record."""
         _seed_player_emojis()
-        monkeypatch.setattr("src.app.is_within_submission_window", lambda: True)
+        monkeypatch.setattr("src.app.is_within_submission_window", lambda group_id="default": True)
         monkeypatch.setattr("src.config.Config.GROUP_CHAT_ID", "test-group@g.us")
 
         from src.app import create_app
@@ -345,7 +345,7 @@ class TestCumulativePickWebhook:
     def test_admin_forwarding_placer_screenshot_records_bet(self, test_db, monkeypatch):
         """When Ed forwards the placer's screenshot, record the bet as placed."""
         _seed_player_emojis()
-        monkeypatch.setattr("src.app.is_within_submission_window", lambda: True)
+        monkeypatch.setattr("src.app.is_within_submission_window", lambda group_id="default": True)
         monkeypatch.setattr("src.config.Config.GROUP_CHAT_ID", "test-group@g.us")
 
         from src.app import create_app
@@ -391,7 +391,7 @@ class TestPickUpdateGuardrails:
 
     def test_single_message_accepted_when_no_existing_pick(self, test_db, monkeypatch):
         """A player with no pick can submit via single message (no emoji prefix)."""
-        monkeypatch.setattr("src.app.is_within_submission_window", lambda: True)
+        monkeypatch.setattr("src.app.is_within_submission_window", lambda group_id="default": True)
         monkeypatch.setattr("src.config.Config.GROUP_CHAT_ID", "test-group@g.us")
 
         from src.app import create_app
@@ -422,7 +422,7 @@ class TestPickUpdateGuardrails:
 
     def test_single_message_ignored_when_player_has_pick(self, test_db, monkeypatch):
         """A player who already has a pick is ignored on single message (no emoji prefix)."""
-        monkeypatch.setattr("src.app.is_within_submission_window", lambda: True)
+        monkeypatch.setattr("src.app.is_within_submission_window", lambda group_id="default": True)
         monkeypatch.setattr("src.config.Config.GROUP_CHAT_ID", "test-group@g.us")
 
         from src.app import create_app
@@ -464,7 +464,7 @@ class TestPickUpdateGuardrails:
     def test_emoji_prefix_update_accepted_when_player_has_pick(self, test_db, monkeypatch):
         """A player who already has a pick can update via emoji prefix (cumulative path)."""
         _seed_player_emojis()
-        monkeypatch.setattr("src.app.is_within_submission_window", lambda: True)
+        monkeypatch.setattr("src.app.is_within_submission_window", lambda group_id="default": True)
         monkeypatch.setattr("src.config.Config.GROUP_CHAT_ID", "test-group@g.us")
 
         from src.app import create_app

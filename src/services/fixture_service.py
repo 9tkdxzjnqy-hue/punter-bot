@@ -84,18 +84,26 @@ def _fetch_non_football_fixtures(today, tomorrow):
         int — total number of fixtures cached.
     """
     try:
-        from src.api.api_sports import get_configured_sports, get_fixtures, normalize_fixture
+        from src.api.api_sports import get_configured_sports, get_fixtures, normalize_fixture, SPORT_CONFIG
     except ImportError:
         return 0
 
     total = 0
     for sport in get_configured_sports():
         try:
+            priority = set(SPORT_CONFIG.get(sport, {}).get("priority_leagues", []))
             for target_date in [today, tomorrow]:
                 date_str = target_date.isoformat()
                 raw_fixtures = get_fixtures(sport, date_str)
                 if not raw_fixtures:
                     continue
+
+                # Filter to priority leagues if configured (empty = accept all)
+                if priority:
+                    raw_fixtures = [
+                        f for f in raw_fixtures
+                        if f.get("league", {}).get("id") in priority
+                    ]
 
                 normalized = []
                 for raw in raw_fixtures:

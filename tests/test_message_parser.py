@@ -99,6 +99,18 @@ class TestPickParsing:
         result = parse_message("nice one", "Kev")
         assert result["type"] == "general"
 
+    def test_long_message_with_number_not_parsed_as_pick(self):
+        """Long chat messages containing number patterns like 12.30 should not be picks."""
+        msg = (
+            "Lads the timetable for Saturday is as follows. "
+            "Breakfast at 9am then we head to the course for 12.30 "
+            "tee time. After that we have dinner booked for 7pm in "
+            "the clubhouse. Make sure everyone has their gear ready "
+            "the night before so we are not waiting around in the morning."
+        )
+        result = parse_message(msg, "Niall")
+        assert result["type"] == "general"
+
     def test_pick_without_odds_btts(self):
         """BTTS pick without odds."""
         result = parse_message("Leicester Southampton BTTS", "Ed")

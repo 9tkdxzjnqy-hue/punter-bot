@@ -348,6 +348,10 @@ def _parse_result(text, sender, sender_phone="", emoji_map=None):
 
 def _parse_pick(text, sender, sender_phone=""):
     """Detect pick submissions containing odds."""
+    # Long messages are chat, not picks — even if they contain number patterns
+    if len(text.split()) > 30:
+        return None
+
     odds_original = None
     odds_decimal = None
 

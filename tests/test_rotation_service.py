@@ -66,6 +66,23 @@ class TestPenaltyQueue:
         assert placer["nickname"] == "Kev"
 
 
+    def test_same_week_streak_penalties_sorted_by_rotation_order(self):
+        """Multiple streak penalties for same week are ordered by rotation, not confirmation order."""
+        from src.services.week_service import get_or_create_current_week
+        week = get_or_create_current_week()
+        players = get_all_players()
+        # Rotation order: Kev(1), Nialler(2), Nug(3), Pawn(4), DA(5), Ed(6)
+        nug = next(p for p in players if p["nickname"] == "Nug")
+        kev = next(p for p in players if p["nickname"] == "Kev")
+
+        # Add Nug first, then Kev — but Kev is earlier in rotation, so Kev should end up first
+        add_to_penalty_queue(nug["id"], "3 consecutive losses", week_id=week["id"])
+        add_to_penalty_queue(kev["id"], "3 consecutive losses", week_id=week["id"])
+
+        placer = get_next_placer()
+        assert placer["nickname"] == "Kev"
+
+
 class TestPenaltyQueueRotationOrder:
     def test_penalty_does_not_disrupt_standard_rotation(self):
         """Penalty entry should appear at top; standard rotation continues from last placer."""

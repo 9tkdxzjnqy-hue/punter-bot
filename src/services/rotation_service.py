@@ -76,8 +76,42 @@ def add_to_penalty_queue(player_id, reason, week_id=None, front=False):
         "VALUES (?, ?, ?, ?, 0)",
         (player_id, reason, position, week_id),
     )
+
+    # Re-sort all same-week entries by rotation order so confirmation order doesn't matter
+    if not front and week_id is not None:
+        _reorder_week_entries_by_rotation(week_id, conn)
+
     conn.commit()
     conn.close()
+
+
+def _reorder_week_entries_by_rotation(week_id, conn):
+    """
+    Re-sort all unprocessed penalty queue entries for a given week by rotation order.
+
+    Called after each streak penalty is added so that the confirmation order
+    from Ed doesn't affect queue ordering — rotation order always wins.
+    """
+    entries = conn.execute(
+        "SELECT id, player_id, position FROM rotation_queue "
+        "WHERE week_added = ? AND processed = 0 ORDER BY position",
+        (week_id,),
+    ).fetchall()
+
+    if len(entries) <= 1:
+        return
+
+    players = get_rotation_order()
+    rotation_idx = {p["id"]: i for i, p in enumerate(players)}
+
+    sorted_entries = sorted(entries, key=lambda e: rotation_idx.get(e["player_id"], 999))
+    positions = sorted(e["position"] for e in entries)
+
+    for entry, pos in zip(sorted_entries, positions):
+        conn.execute(
+            "UPDATE rotation_queue SET position = ? WHERE id = ?",
+            (pos, entry["id"]),
+        )
 
 
 def advance_rotation(week_id, placer_id):

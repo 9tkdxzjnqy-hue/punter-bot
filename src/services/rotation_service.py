@@ -21,10 +21,10 @@ def get_next_placer():
         conn.close()
         return get_player_by_id(penalty_entry["player_id"])
 
-    # Standard rotation — find who placed last and get the next person
+    # Standard rotation — find last non-penalty placer and get the next person
     last_week = conn.execute(
         "SELECT w.placer_id FROM weeks w "
-        "WHERE w.placer_id IS NOT NULL "
+        "WHERE w.placer_id IS NOT NULL AND w.placer_is_penalty = 0 "
         "ORDER BY w.id DESC LIMIT 1"
     ).fetchone()
 
@@ -49,6 +49,15 @@ def add_to_penalty_queue(player_id, reason, week_id=None):
     """Add a player to the penalty rotation queue."""
     conn = get_db()
 
+    # Don't add if already in queue
+    existing = conn.execute(
+        "SELECT id FROM rotation_queue WHERE player_id = ? AND processed = 0",
+        (player_id,),
+    ).fetchone()
+    if existing:
+        conn.close()
+        return
+
     # Get the next position
     max_pos = conn.execute(
         "SELECT COALESCE(MAX(position), 0) FROM rotation_queue WHERE processed = 0"
@@ -68,22 +77,30 @@ def advance_rotation(week_id, placer_id):
     After a week completes, record who placed and process penalty queue.
 
     Sets the placer on the week record and marks any penalty queue entry as processed.
+    Flags the placement as a penalty if the player was in the penalty queue.
     """
     conn = get_db()
 
+    # Check if this placement is from the penalty queue (before marking processed)
+    penalty_entry = conn.execute(
+        "SELECT id FROM rotation_queue WHERE player_id = ? AND processed = 0 "
+        "ORDER BY position ASC LIMIT 1",
+        (placer_id,),
+    ).fetchone()
+    is_penalty = 1 if penalty_entry else 0
+
     # Record the placer on the week
     conn.execute(
-        "UPDATE weeks SET placer_id = ? WHERE id = ?",
-        (placer_id, week_id),
+        "UPDATE weeks SET placer_id = ?, placer_is_penalty = ? WHERE id = ?",
+        (placer_id, is_penalty, week_id),
     )
 
     # Mark any penalty queue entry for this player as processed
-    conn.execute(
-        "UPDATE rotation_queue SET processed = 1 "
-        "WHERE player_id = ? AND processed = 0 "
-        "ORDER BY position ASC LIMIT 1",
-        (placer_id,),
-    )
+    if penalty_entry:
+        conn.execute(
+            "UPDATE rotation_queue SET processed = 1 WHERE id = ?",
+            (penalty_entry["id"],),
+        )
 
     conn.commit()
     conn.close()
@@ -140,10 +157,10 @@ def _build_queue(next_placer):
         "WHERE rq.processed = 0 ORDER BY rq.position"
     ).fetchall()
 
-    # Find last placer to determine standard rotation start
+    # Find last non-penalty placer to determine standard rotation start
     last_week = conn.execute(
         "SELECT w.placer_id FROM weeks w "
-        "WHERE w.placer_id IS NOT NULL "
+        "WHERE w.placer_id IS NOT NULL AND w.placer_is_penalty = 0 "
         "ORDER BY w.id DESC LIMIT 1"
     ).fetchone()
     conn.close()

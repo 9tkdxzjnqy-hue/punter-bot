@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS weeks (
     deadline TIMESTAMP NOT NULL,
     status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed', 'completed')),
     placer_id INTEGER REFERENCES players(id),
+    placer_is_penalty INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(week_number, season, group_id)
 );

@@ -60,10 +60,10 @@ class TestPenaltyQueue:
         conn.commit()
         conn.close()
 
-        # After processing, standard rotation resumes from after Nug (position 3)
+        # After processing, standard rotation resumes from the last non-penalty placer.
+        # No standard placement exists yet, so rotation starts from the top: Kev (position 1).
         placer = get_next_placer()
-        # Next after Nug in rotation is Pawn (position 4)
-        assert placer["nickname"] == "Pawn"
+        assert placer["nickname"] == "Kev"
 
 
 class TestPenaltyQueueRotationOrder:

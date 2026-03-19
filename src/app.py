@@ -707,6 +707,9 @@ def handle_result(parsed):
     if all_results_complete(week["id"]):
         results = get_week_results(week["id"])
         complete_week(week["id"])  # Complete first so get_next_placer sees this week
+        losers = [r for r in results if r["outcome"] == "loss"]
+        if len(losers) == 1:
+            add_to_penalty_queue(losers[0]["player_id"], "sole loser", week["id"])
         leaderboard = get_leaderboard()
         next_placer = get_next_placer()
         reply += "\n\n" + butler.week_complete_summary(

@@ -66,26 +66,27 @@
 - **Abbreviation expansion fixed**: Short codes (ne, sf, gb) used `re.sub` without word boundaries, corrupting team names (e.g. "BourNew Englandmouth"). Fixed with `\b` anchors.
 - **Parser false positives fixed**: Chat messages matched as picks — "The value" triggered "v" team-vs-team pattern, and long messages matched `_looks_like_pick`. Fixed with word boundaries on v/vs/@ and a 15-word length guard.
 
-## Current State (2026-02-26)
+## Current State (2026-03-19)
 
 - **Deployed on OCI**: Ubuntu 22.04 VM, Always Free tier (193.123.179.96)
 - **All services running via PM2**: Bridge on :3000, Flask on :5001, health check
 - **WhatsApp connected**: Bot authenticated and live in main group (447762550958-1423072447@g.us)
 - **SSH access**: `ssh -i ~/Documents/Oracle/ssh-key-2026-02-18.key ubuntu@193.123.179.96`
-- **Tests**: 140 passing (65 parser + 75 service/integration tests)
+- **Tests**: 255 passing
 - **Phase 2 complete**: Structured data, API integration, auto-resulting, market prices
 - **Phase 3a implemented**: Live match events + smart auto-resulting (trial pending)
 - **Phase 4 complete**: Multi-sport support (12 sports detected, fixture/odds/auto-result wired up)
+- **Phase 5 complete**: UX polish, rotation logic fully correct
 - **Admin phones configured**: Ed (`353871527436@c.us`) as ADMIN_PHONE, all 6 player phones stored in DB
 - **LLM personality**: Butler persona live in main group (`LLM_ENABLED=true`)
 - **LLM architecture**: Framing-only — butler adds opening/closing lines around templates, never rewrites structured content. Template text passed to LLM to prevent repetition. Reminders use opening only (no closing).
 - **LLM functions**: `generate()`, `banter_reply()`, `reset_persona()` all implemented and working
 - **Group isolation**: `group_id` on weeks table — test and main groups have separate week/pick spaces
-- **API-Football**: Fixture caching (Wed 7:30PM), pick enrichment, smart auto-resulting (per-fixture on FT + Mon 10AM safety sweep)
+- **API-Football**: Fixture caching, pick enrichment, smart auto-resulting (per-fixture on FT + Mon 10AM safety sweep)
 - **Multi-sport**: Sport detection on every pick, sport-aware matching/aliases/odds; non-football API keys not yet configured
 - **Match monitor**: Live events (goals, red cards) + auto-result on match end; feature-flagged `MATCH_MONITOR_ENABLED`
 - **The Odds API**: Market price lookup on pick submission (best-effort, covers all 12 sports)
-- **Friday reminder**: Updated to 7PM
+- **Rotation**: Sole loser auto-queued at front; penalty placements don't advance standard cursor (`placer_is_penalty` on weeks); same-week streak penalties sorted by rotation order
 
 ## Phase 0.5: Cloud Migration [LIVE]
 
@@ -339,6 +340,40 @@ pm2 restart all
 - [ ] MMA/UFC fighter-specific resulting (fighter A beat fighter B, not team scores)
 - [ ] Configure sport API keys on server when ready (rugby first for Six Nations)
 
+## Phase 5: UX Polish & Rotation Fixes [COMPLETE — 2026-03-19]
+
+### Display & Announcements
+- [x] Ed-style result announcements: `Mr. Kevin ❌ — Liverpool to win @ 2/1`
+- [x] Streak-multiplied loss emojis: ❌❌ for 2L, ❌❌❌ for 3L
+- [x] Emoji form/streak in stats: ✅/❌ instead of W/L (form: `✅✅❌✅❌`, streak: `✅✅✅`)
+- [x] Acca loss suppression: live events (goals, FT) suppressed once any pick has lost; result announcements still post
+- [x] Kickoff-ordered picks: `!picks` and all-picks-in message ordered by fixture kickoff time with day headers and "Kickoff TBC" for unmatched picks
+- [x] Kickoff-bundled display: same-kickoff picks grouped under single `⏰ time` header
+- [x] Early kickoff warnings: `_early_kickoff_note()` on individual picks; `earliest_kickoff_warning()` on status — warns when any fixture kicks off before Saturday 12:30 PM Dublin time
+
+### Submission Window
+- [x] Dynamic opening: window opens immediately when previous week completes (all results in), not fixed to Wednesday 7PM
+- [x] Closed-window reply: picks outside the window get a reply instead of silent drop
+
+### Rotation Fixes (2026-03-19)
+- [x] **Sole loser rule**: when exactly one player loses their pick for the week, they are automatically added to the front of the rotation queue at week completion (no Ed confirmation required)
+- [x] **Penalty cursor fix**: added `placer_is_penalty` column on `weeks` table; penalty placements no longer advance the standard rotation cursor — standard rotation resumes from after the last non-penalty placer
+- [x] **Same-week streak penalty ordering**: multiple streak penalties confirmed for the same week are re-sorted in rotation order after each confirmation, regardless of the order Ed confirms them
+- [x] **Duplicate guard**: `add_to_penalty_queue` skips silently if player already has an unprocessed entry
+- [x] Historical data migrated: Declan's week 4 penalty placement flagged as `placer_is_penalty=1`; Nug added to rotation queue as sole loser for week 4
+
+### Other Fixes
+- [x] Reject long messages as picks (>30 words)
+- [x] Filter non-football fixtures by priority leagues before caching
+- [x] Handicap-safe odds stripping: `(?<![+-])` lookbehind prevents `-10.5` handicaps being stripped
+- [x] Sport-filtered fixture joins: prevent cross-sport fixture collisions
+- [x] Emoji result parsing: `♟️❌` style results supported
+- [x] Cache TTL fix: `refresh_fixture()` bypasses cache so match monitor polls get fresh data
+- [x] Alias-aware auto-resulting: resolves abbreviations via alias table when substring matching fails
+- [x] Cross-sport fallback: football-default picks retry with `sport=None` to match any cached fixture
+- [x] Single API key: `API_FOOTBALL_KEY` shared across all api-sports.io products
+- [x] Pick count in LLM context: `picks_so_far` passed to `pick_confirmed()` so LLM knows pick number
+
 ## Phase 3b: Enhancements [PLANNED]
 
 ### Bet Slip Reader
@@ -354,5 +389,5 @@ pm2 restart all
 
 ---
 
-**Last Updated:** 2026-02-26
-**Status:** ✅ Phase 4 Complete — Multi-sport support (12 sports detected, fixture/odds/auto-result ready)
+**Last Updated:** 2026-03-19
+**Status:** ✅ Phase 5 Complete — Rotation logic fully correct; 255 tests passing

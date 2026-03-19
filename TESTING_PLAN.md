@@ -15,7 +15,7 @@ Reference for MVP testing. Update status as flows are confirmed.
 | 3 | **Cumulative picks (new)** — Multi-line message with emojis → bot confirms only new picks | ✅ | |
 | 4 | **Cumulative picks (update)** — Player edits a line and resends → bot confirms only the changed pick | ✅ | Bare team names (e.g. Villa) accepted; replacement detected |
 | 5 | **Cumulative picks (unchanged resubmission)** — Player resends same message → bot does not re-confirm unchanged picks | ✅ | |
-| 6 | **Pick outside window** — Pick sent outside Wed 7PM–Fri 10PM → bot ignores (unless TEST_MODE) | ⏳ | |
+| 6 | **Pick outside window** — Pick sent outside window → bot sends a reply (not silent drop) | ✅ | Dynamic window: opens when previous week completes |
 | 7 | **Late pick** — Pick after Fri 10PM → bot records as late and adds to penalty queue | ⏳ | |
 | 8 | **Unknown player** — Pick from unrecognised sender → bot ignores | ⏳ | |
 | 9 | **!picks** — Command shows recorded picks with formal display, odds shown once | ✅ | |
@@ -28,7 +28,7 @@ Reference for MVP testing. Update status as flows are confirmed.
 |---|------|--------|-------|
 | 10 | **Result (win)** — Ed posts `Kev ✅` → bot records win and announces | ✅ | |
 | 11 | **Result (loss)** — Ed posts `Nialler ❌` → bot records loss and announces | ✅ | |
-| 12 | **Streak penalty suggestion** — Result causes 3rd/5th/7th/10th consecutive loss → bot suggests penalty for Ed | ⏳ | |
+| 12 | **Streak penalty suggestion** — Result causes 3rd/5th/7th/10th consecutive loss → bot suggests penalty for Ed | ✅ | Unit tested |
 | 13 | **Result from non-admin** — Non-Ed posts result → bot ignores | ⏳ | |
 | 14 | **Result for player with no pick** — Ed posts result for player with no pick → bot rejects | ⏳ | |
 | 15 | **All results in** — Last result posted → bot sends weekend summary and completes week | ✅ | |
@@ -39,9 +39,12 @@ Reference for MVP testing. Update status as flows are confirmed.
 
 | # | Flow | Status | Notes |
 |---|------|--------|-------|
-| 16 | **!confirm penalty** — Ed confirms suggested penalty → bot applies and updates vault/rotation | ⏳ | |
+| 16 | **!confirm penalty** — Ed confirms suggested penalty → bot applies and updates vault/rotation | ✅ | Unit tested |
 | 17 | **!confirm penalty (unauthorised)** — Non-Ed tries to confirm → bot rejects | ⏳ | |
-| 18 | **Streak-3 penalty** — 3-loss penalty confirmed → player added to rotation queue to place next week | ⏳ | |
+| 18 | **Streak-3 penalty** — 3-loss penalty confirmed → player added to rotation queue (back of queue) | ✅ | Unit tested |
+| 18a | **Sole loser penalty** — One player loses, rest win → player auto-added to front of rotation queue | ✅ | Unit tested |
+| 18b | **Penalty cursor** — Penalty placer recorded but standard rotation resumes from last non-penalty placer | ✅ | Unit tested |
+| 18c | **Same-week streak order** — Two streak penalties confirmed out of rotation order → sorted correctly | ✅ | Unit tested |
 
 ---
 
@@ -137,6 +140,6 @@ Reference for MVP testing. Update status as flows are confirmed.
 
 ## Version
 
-- **Document:** Testing plan v0.12
+- **Document:** Testing plan v0.13
 - **Requirements:** See `RULES.md`
-- **Last updated:** 2026-02-25
+- **Last updated:** 2026-03-19

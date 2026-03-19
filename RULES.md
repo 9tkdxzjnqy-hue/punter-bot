@@ -34,9 +34,9 @@ The source of truth for how the game works: players, picks, penalties, rotation,
 - **HT/FT:** `Liverpool HT/FT`
 
 ### Submission Window
-- **Opens:** Wednesday 7:00 PM (Europe/Dublin)
+- **Opens:** As soon as the previous week is fully resulted (dynamic) — falls back to Wednesday 7:00 PM if not yet complete
 - **Closes:** Friday 10:00 PM (strict deadline)
-- Picks outside this window are ignored
+- Picks outside this window get a reply rather than silent drop
 
 ### Display
 - Abbreviations expanded: leics → Leicester, Soton → Southampton, etc.
@@ -58,6 +58,8 @@ The source of truth for how the game works: players, picks, penalties, rotation,
 
 ## Penalties
 
+### Streak penalties (consecutive losses)
+
 | Consecutive Losses | Penalty |
 |-------------------|---------|
 | 3 | Pay for next week's bet (added to rotation queue) |
@@ -66,16 +68,25 @@ The source of truth for how the game works: players, picks, penalties, rotation,
 | 10 | €200 to vault |
 
 - Bot suggests penalty → Ed confirms with `!confirm penalty [player]`
+- On confirmation, player is added to the rotation queue (back of any existing entries)
+- If multiple streak penalties are confirmed for the same week, they are ordered by rotation order regardless of the order Ed confirms them
 - Payment via Revolut to Ed (not tracked by bot)
+
+### Sole loser penalty
+
+- If exactly one player loses their pick in a given week, they are automatically added to the **front** of the rotation queue to place the next week's bet
+- No confirmation required — applied automatically at week completion
 
 ---
 
 ## Rotation
 
-**Standard order:** `Kev → Nialler → Nug → Pawn → Don → Ed`
+**Standard order:** `Aidan → Declan → Ed → Kev → Niall → Nug`
 
-- **Penalty queue:** Late submissions and 3-loss penalties jump the queue
-- **Queue priority:** Penalties before regular rotation
+- **Penalty queue:** Sole loser and 3-loss streak penalties jump the queue ahead of regular rotation
+- **Sole loser:** Goes to front of the penalty queue
+- **Streak penalties:** Appended to back of queue; multiple same-week penalties sorted in rotation order
+- **Penalty placements don't advance the standard cursor** — the standard rotation resumes from after the last non-penalty placer
 - **Advances:** Automatically when placer posts bet slip screenshot or confirmation text
 
 ---

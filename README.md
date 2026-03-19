@@ -125,9 +125,10 @@ curl -X POST http://localhost:5001/test-webhook \
 ## Testing
 
 ```bash
-source venv/bin/activate
-python -m pytest tests/ -v
+python3 -m pytest tests/ -v
 ```
+
+No venv needed on macOS with system Python 3. 255 tests.
 
 ## Project Structure
 
@@ -145,7 +146,7 @@ punter-bot/
 │   ├── llm_client.py      # Groq API wrapper + persona management
 │   ├── config.py          # Environment config
 │   ├── db.py              # Database helpers + migrations
-│   ├── schema.sql         # SQLite schema (11 tables)
+│   ├── schema.sql         # SQLite schema (11 tables + placer_is_penalty on weeks)
 │   ├── api/               # External API clients
 │   │   ├── api_football.py  # API-Football v3 (fixtures, scores, events)
 │   │   └── odds_api.py      # The Odds API (market prices)

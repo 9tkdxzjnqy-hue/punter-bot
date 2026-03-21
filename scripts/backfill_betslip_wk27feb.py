@@ -42,7 +42,7 @@ SELECTIONS = [
     "Dublin",       # Roscommon v Dublin - Handicap Betting
     "Cavan",        # Cavan v Louth - Match Winner
     "Bournemouth",  # Bournemouth v Sunderland - Match Odds
-    "Yes",          # Newcastle v Everton - Both Teams to Score
+    "Newcastle/Everton BTTS",  # Newcastle v Everton - Both Teams to Score
     "Man Utd",      # Man Utd v Crystal Palace - Match Odds
     "Ipswich",      # Ipswich v Swansea - Match Odds
 ]

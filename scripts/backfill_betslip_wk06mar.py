@@ -29,19 +29,17 @@ from src.db import get_db, init_db
 from src.services.bet_slip_service import match_legs_to_picks, record_bet_slip, update_confirmed_odds
 from src.services.pick_service import get_picks_for_week
 
-MISSING_SELECTION = "Coventry"  # Bristol v Coventry, Coventry to win — submitted at evs
-
 EXTRACTED = {
     "stake": 20.00,
     "total_odds": round(1042.36 / 20, 4),  # 52.118
     "potential_return": 1042.36,
     "legs": [
-        {"selection": "Coventry",       "odds": round(39 / 20, 4)},  # 19/20 = 1.95
-        {"selection": "Man City",       "odds": 2.0},                # 1/1   = 2.0
-        {"selection": "Bradford",       "odds": round(7  / 4,  4)},  # 3/4   = 1.75
-        {"selection": "Ireland -26.5",  "odds": 2.0},                # 1/1   = 2.0
-        {"selection": "France -10.5",   "odds": round(21 / 11, 4)},  # 10/11 = 1.9091
-        {"selection": MISSING_SELECTION, "odds": 2.0},               # inferred evens
+        {"selection": "Coventry",            "odds": round(39 / 20, 4)},  # 19/20 = 1.95
+        {"selection": "City",                "odds": 2.0},                # 1/1   = 2.0 (Man City)
+        {"selection": "Bradford to win",     "odds": round(7  / 4,  4)},  # 3/4   = 1.75
+        {"selection": "Ireland -26",         "odds": 2.0},                # 1/1   = 2.0
+        {"selection": "France -10.5",        "odds": round(21 / 11, 4)},  # 10/11 = 1.9091
+        {"selection": "England -7",          "odds": 2.0},                # 1/1   = 2.0 (inferred, rugby)
     ],
 }
 

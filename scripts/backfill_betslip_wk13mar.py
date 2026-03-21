@@ -31,12 +31,12 @@ EXTRACTED = {
     "total_odds": round(1231.07 / 20, 4),  # 61.5535
     "potential_return": 1231.07,
     "legs": [
-        {"selection": "Ireland -2.5",   "odds": round(21 / 13, 4)},  # 8/13  = 1.6154
-        {"selection": "Wales +3.5",     "odds": round(21 / 11, 4)},  # 10/11 = 1.9091
-        {"selection": "Gaelic Warrior", "odds": 4.0},                # 3/1   = 4.0
-        {"selection": "Man Utd",        "odds": round(19 / 11, 4)},  # 8/11  = 1.7273
-        {"selection": "Kerry",          "odds": round(13 / 9,  4)},  # 4/9   = 1.4444
-        {"selection": "Dublin +1",      "odds": 2.0},                # 1/1   = 2.0 (inferred: 61.5535 / 30.777)
+        {"selection": "Ireland -2.5 alternative", "odds": round(21 / 13, 4)},  # 8/13  = 1.6154
+        {"selection": "wales +3",                 "odds": round(21 / 11, 4)},  # 10/11 = 1.9091
+        {"selection": "Gaelic warrior",           "odds": 4.0},                # 3/1   = 4.0
+        {"selection": "United 8/11",              "odds": round(19 / 11, 4)},  # 8/11  = 1.7273
+        {"selection": "Kerry football",           "odds": round(13 / 9,  4)},  # 4/9   = 1.4444
+        {"selection": "Dublin +1 evs",            "odds": 2.0},                # 1/1   = 2.0 (inferred)
     ],
 }
 

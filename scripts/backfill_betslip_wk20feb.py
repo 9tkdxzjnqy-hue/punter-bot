@@ -34,12 +34,12 @@ EXTRACTED = {
     "total_odds": round(805.75 / 20, 4),  # 40.2875 (pre-boost; slip shows ~40/1)
     "potential_return": 966.90,            # boosted payout (+20%)
     "legs": [
-        {"selection": "Scotland -18.5", "odds": round(19 / 10, 4)},  # 9/10  = 1.9
-        {"selection": "Italy +27.5",    "odds": round(11 / 6,  4)},  # 5/6   = 1.8333
-        {"selection": "Aston Villa",    "odds": round(37 / 20, 4)},  # 17/20 = 1.85
-        {"selection": "Liverpool",      "odds": round(11 / 6,  4)},  # 5/6   = 1.8333
-        {"selection": "Yes",            "odds": round(37 / 20, 4)},  # 17/20 = 1.85 (BTTS Wimbledon v Bradford)
-        {"selection": "Ireland +10.5",  "odds": round(37 / 20, 4)},  # 17/20 = 1.85
+        {"selection": "Scotland -18",              "odds": round(19 / 10, 4)},  # 9/10  = 1.9
+        {"selection": "Italy +29 vs France",       "odds": round(11 / 6,  4)},  # 5/6   = 1.8333
+        {"selection": "villa",                     "odds": round(37 / 20, 4)},  # 17/20 = 1.85
+        {"selection": "Liverpool",                 "odds": round(11 / 6,  4)},  # 5/6   = 1.8333
+        {"selection": "AFC Wimbledon Bradford BTTS","odds": round(37 / 20, 4)},  # 17/20 = 1.85
+        {"selection": "Ireland plus 10",           "odds": round(37 / 20, 4)},  # 17/20 = 1.85
     ],
 }
 

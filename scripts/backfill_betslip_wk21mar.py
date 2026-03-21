@@ -31,19 +31,17 @@ from src.db import get_db, init_db
 from src.services.bet_slip_service import match_legs_to_picks, record_bet_slip, update_confirmed_odds
 from src.services.pick_service import get_picks_for_week
 
-MISSING_SELECTION = "Plymouth"  # 6/5 = 2.2 decimal
-
 EXTRACTED = {
     "stake": 20.00,
     "total_odds": round(562.50 / 20, 4),  # 28.125
     "potential_return": 562.50,
     "legs": [
-        {"selection": "Over 5.5 cards",   "odds": 2.0},                 # 1/1
-        {"selection": "Yes BTTS",          "odds": round(10 / 6, 4)},   # 4/6 = 1.6667 (Sheff Utd v Wrexham)
-        {"selection": "Fulham",            "odds": 1.5},                 # 1/2
-        {"selection": "Mayo",              "odds": 1.5},                 # 1/2 (Draw No Bet, v Roscommon)
-        {"selection": "Everton (+1)",      "odds": round(10 / 6, 4)},   # 4/6 = 1.6667 (Handicap)
-        {"selection": MISSING_SELECTION,   "odds": round(11 / 5, 4)},   # 6/5 = 2.2
+        {"selection": "Newcastle vs Sunderland Over 5.5", "odds": 2.0},               # 1/1
+        {"selection": "SHU/Wrexham BTTS",                "odds": round(10 / 6, 4)},  # 4/6 = 1.6667
+        {"selection": "Fulham",                          "odds": 1.5},                # 1/2
+        {"selection": "mayo",                            "odds": 1.5},                # 1/2 (Draw No Bet)
+        {"selection": "Everton +1 vs Chelsea",           "odds": round(10 / 6, 4)},  # 4/6 = 1.6667
+        {"selection": "Plymouth",                        "odds": round(11 / 5, 4)},  # 6/5 = 2.2
     ],
 }
 

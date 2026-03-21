@@ -39,7 +39,7 @@ EXTRACTED = {
         {"selection": "Newcastle vs Sunderland Over 5.5", "odds": 2.0},               # 1/1
         {"selection": "SHU/Wrexham BTTS",                "odds": round(10 / 6, 4)},  # 4/6 = 1.6667
         {"selection": "Fulham",                          "odds": 1.5},                # 1/2
-        {"selection": "mayo",                            "odds": 1.5},                # 1/2 (Draw No Bet)
+        {"selection": "mayo football",                   "odds": 1.5},                # 1/2 (Draw No Bet)
         {"selection": "Everton +1 vs Chelsea",           "odds": round(10 / 6, 4)},  # 4/6 = 1.6667
         {"selection": "Plymouth",                        "odds": round(11 / 5, 4)},  # 6/5 = 2.2
     ],

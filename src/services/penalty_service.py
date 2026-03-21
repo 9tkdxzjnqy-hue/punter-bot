@@ -9,6 +9,7 @@ PENALTY_AMOUNTS = {
     "streak_5": 50,
     "streak_7": 100,
     "streak_10": 200,
+    "sole_loser": 0,    # only loser on the acca that week
 }
 
 # Maps consecutive loss count → penalty type string
@@ -88,6 +89,26 @@ def confirm_penalty(penalty_id, confirmed_by=""):
     conn.close()
 
     return dict(penalty), vault_total
+
+
+def record_sole_loser_penalty(player_id, week_id):
+    """
+    Record an auto-confirmed sole-loser penalty (no vault contribution).
+    Idempotent — silently skips if already recorded.
+    """
+    conn = get_db()
+    existing = conn.execute(
+        "SELECT id FROM penalties WHERE player_id = ? AND week_id = ? AND type = 'sole_loser'",
+        (player_id, week_id),
+    ).fetchone()
+    if not existing:
+        conn.execute(
+            "INSERT INTO penalties (player_id, week_id, type, amount, status, confirmed_by, created_at) "
+            "VALUES (?, ?, 'sole_loser', 0, 'confirmed', 'auto', ?)",
+            (player_id, week_id, datetime.utcnow().isoformat()),
+        )
+        conn.commit()
+    conn.close()
 
 
 def get_pending_penalties():

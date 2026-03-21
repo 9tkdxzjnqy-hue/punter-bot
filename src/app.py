@@ -26,7 +26,7 @@ from src.services.result_service import (
 )
 from src.services.penalty_service import (
     suggest_penalty, confirm_penalty, get_pending_penalties,
-    get_pending_penalty_for_player_id,
+    get_pending_penalty_for_player_id, record_sole_loser_penalty,
     get_vault_total, PENALTY_THRESHOLDS, PENALTY_AMOUNTS,
 )
 from src.services.rotation_service import get_next_placer, add_to_penalty_queue, get_rotation_display, advance_rotation
@@ -178,6 +178,9 @@ def handle_command(parsed):
 
     if command == "resetseason":
         return _cmd_resetseason(parsed)
+
+    if command == "report":
+        return _cmd_report(parsed, args)
 
     if command == "status":
         return _cmd_status(parsed)
@@ -433,6 +436,56 @@ def _cmd_resetseason(parsed):
     conn.close()
 
     return "The season has been reset. All weeks, picks, results, and penalties have been cleared. Players remain. The next week created will be Week 1."
+
+
+def _cmd_report(parsed, args):
+    """!report [week] — Admin only. Post the Punter Report for a 5-week period."""
+    if not _is_authorized_admin(parsed):
+        return "Only an admin may generate the Punter Report."
+
+    from src.services.report_service import get_period_data, publish_report
+    from src.db import get_db
+
+    group_id = _get_group_id()
+
+    # Determine end_week and season
+    if args:
+        try:
+            end_week = int(args[0])
+        except ValueError:
+            return "Usage: !report [week_number]"
+    else:
+        # Default: most recently completed 5-week block
+        conn = get_db()
+        row = conn.execute(
+            "SELECT week_number, season FROM weeks WHERE group_id = ? AND status = 'completed' "
+            "ORDER BY week_number DESC LIMIT 1",
+            (group_id,),
+        ).fetchone()
+        conn.close()
+        if not row:
+            return "No completed weeks found."
+        # Round down to nearest 5-week boundary
+        end_week = (row["week_number"] // 5) * 5
+        if end_week == 0:
+            return "Not enough completed weeks for a report (need at least 5)."
+
+    # Look up the season for that end_week
+    conn = get_db()
+    row = conn.execute(
+        "SELECT season FROM weeks WHERE group_id = ? AND week_number = ? LIMIT 1",
+        (group_id, end_week),
+    ).fetchone()
+    conn.close()
+    if not row:
+        return f"Week {end_week} not found in the database."
+    season = row["season"]
+
+    data = get_period_data(season, end_week, group_id)
+    if not data["player_rows"]:
+        return f"No results data found for weeks {data['start_week']}–{end_week}."
+
+    return butler.punter_report_display(data)
 
 
 def _cmd_myphone(parsed):
@@ -723,11 +776,19 @@ def handle_result(parsed):
         losers = [r for r in results if r["outcome"] == "loss"]
         if len(losers) == 1:
             add_to_penalty_queue(losers[0]["player_id"], "sole loser", week["id"], front=True)
+            record_sole_loser_penalty(losers[0]["player_id"], week["id"])
         leaderboard = get_leaderboard()
         next_placer = get_next_placer()
         reply += "\n\n" + butler.week_complete_summary(
             results, week["week_number"], leaderboard or [], next_placer or {}
         )
+        # Schedule the Punter Report after every 5th completed week
+        if week["week_number"] % 5 == 0:
+            try:
+                from src.services.report_service import schedule_report
+                schedule_report(week["season"], week["week_number"], _get_group_id())
+            except Exception:
+                logger.exception("Failed to schedule Punter Report after week completion")
 
     return reply
 

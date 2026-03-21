@@ -117,7 +117,7 @@ def submit_pick(player_id, week_id, description, odds_decimal, odds_original, be
 
 
 # Sports that have no fixture API — odds-only enrichment
-ODDS_ONLY_SPORTS = {"tennis", "golf", "boxing", "gaa_football", "gaa_hurling", "formula1"}
+ODDS_ONLY_SPORTS = {"tennis", "golf", "boxing", "gaa_football", "gaa_hurling", "formula1", "horse_racing"}
 
 
 def _try_enrich(description, bet_type, sport="football", include_started=False):

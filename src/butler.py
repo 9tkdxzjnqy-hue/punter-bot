@@ -613,9 +613,170 @@ def help_text():
         "Admin:\n"
         "!confirm penalty [player] — Confirm a pending penalty\n"
         "!override [player] [win/loss] — Change a result\n"
+        "!report [week] — Post the 5-week Punter Report\n"
         "!resetweek — Reset the current week\n"
         "!resetseason — Clear all data for fresh start (next week = Week 1)"
     )
+
+
+def punter_report_display(period_data):
+    """
+    Format the end-of-5-week Punter Report.
+    Pure template — no LLM.
+    """
+    from src.services.report_service import (
+        compute_leaderboard, compute_acca_record, compute_group_pnl,
+        compute_singles_pnl, compute_biggest_winner, compute_awards,
+        compute_sole_losers,
+    )
+
+    start_week = period_data["start_week"]
+    end_week = period_data["end_week"]
+    player_rows = period_data["player_rows"]
+    bet_slips = period_data["bet_slips"]
+    penalties = period_data["penalties"]
+
+    lines = [
+        f"\U0001f4cb *The Punter Report \u2014 Weeks {start_week}\u2013{end_week}*",
+        "",
+    ]
+
+    # --- Leaderboard ---
+    lb = compute_leaderboard(player_rows, start_week, end_week)
+    lines.append("\U0001f4ca *Leaderboard*")
+    lines.append("")
+    # Standard competition ranking: 1,1,3,4,4,6 — tied players share a rank,
+    # next rank skips. Ties sorted by avg_odds DESC (already in lb order).
+    prev_win_rate = None
+    current_rank = 0
+    for i, entry in enumerate(lb):
+        if entry["win_rate"] != prev_win_rate:
+            current_rank = i + 1
+            prev_win_rate = entry["win_rate"]
+        avg_str = f"  avg @ {entry['avg_odds']:.1f}" if entry["avg_odds"] else ""
+        lines.append(
+            f"{current_rank}. {entry['formal_name']}   "
+            f"({entry['win_rate']:.0f}%)  {entry['form']}{avg_str}"
+        )
+    lines.append("")
+
+    # --- Acca record ---
+    acca_wins, acca_total = compute_acca_record(bet_slips, player_rows)
+    lines.append(f"\U0001f3af *Acca record:* {acca_wins}/{acca_total} weeks")
+    lines.append("")
+
+    # --- Group P&L ---
+    pnl = compute_group_pnl(bet_slips, player_rows)
+    if pnl["staked"] > 0:
+        net_sign = "+" if pnl["net"] >= 0 else ""
+        lines.append(
+            f"\U0001f4b0 *Group P&L:* staked \u20ac{pnl['staked']:.0f} \u00b7 "
+            f"returned \u20ac{pnl['returned']:.0f} \u00b7 net {net_sign}\u20ac{pnl['net']:.0f}"
+        )
+        lines.append("")
+
+    # --- Singles P&L ---
+    singles = compute_singles_pnl(player_rows, bet_slips)
+    if singles:
+        lines.append("\U0001f4c8 *Singles P&L* (if each pick was a \u20ac20 single)")
+        lines.append("")
+        sorted_singles = sorted(singles.items(), key=lambda x: -x[1]["pnl"])
+        for pid, s in sorted_singles:
+            sign = "+" if s["pnl"] >= 0 else ""
+            lines.append(f"{s['formal_name']}:  {sign}\u20ac{s['pnl']:.2f}")
+        lines.append("")
+
+    # --- Awards ---
+    awards = compute_awards(player_rows)
+    biggest = compute_biggest_winner(player_rows)
+    has_awards = biggest or awards["optimist"] or awards["cold_spell"]
+    if has_awards:
+        lines.append("\U0001f3c5 *Awards*")
+        lines.append("")
+        if biggest:
+            desc = biggest.get("description") or ""
+            desc_part = f" ({_strip_odds_for_display(desc)})" if desc else ""
+            lines.append(
+                f"\U0001f4aa Biggest priced winner: {biggest['formal_name']}{desc_part}"
+                f" @ {_decimal_to_fractional(biggest['odds'])} \u2705"
+            )
+        if awards["optimist"]:
+            opt = awards["optimist"]
+            lines.append(f"\U0001f52e Optimist: {opt['formal_name']} \u2014 avg odds {opt['avg_odds']:.1f}")
+        if awards["cold_spell"]:
+            cs = awards["cold_spell"]
+            # Increasingly colder emojis: 🌬️ 🧊 ❄️ 🥶 🌨️ ☃️ 🏔️ 🧊🥶 (cap at last)
+            _cold_emojis = [
+                "\U0001f32c\ufe0f",  # 1 loss: 🌬️
+                "\U0001f9ca",        # 2 losses: 🧊
+                "\u2744\ufe0f",      # 3 losses: ❄️
+                "\U0001f976",        # 4 losses: 🥶
+                "\U0001f328\ufe0f",  # 5 losses: 🌨️
+                "\u2603\ufe0f",      # 6 losses: ☃️
+                "\U0001f3d4\ufe0f",  # 7+ losses: 🏔️ (snowcapped mountain)
+            ]
+            cold_emoji = _cold_emojis[min(cs["streak"] - 1, len(_cold_emojis) - 1)]
+            lines.append(f"{cold_emoji} Cold spell: {cs['formal_name']} \u2014 {cs['streak']} straight losses")
+        lines.append("")
+
+    # --- Penalties ---
+    # Group DB penalties and sole-loser events together by player
+    by_player = {}
+    for pen in penalties:
+        ptype = pen.get("type", "")
+        if ptype == "sole_loser":
+            continue  # displayed via compute_sole_losers below
+        pid = pen["player_id"]
+        if pid not in by_player:
+            by_player[pid] = {"formal_name": pen["formal_name"], "items": []}
+        amount = float(pen.get("amount") or 0)
+        if amount > 0:
+            streak_num = ptype.split("_")[1] if ptype.startswith("streak_") else None
+            desc = f"\u20ac{amount:.0f} fine"
+            if streak_num:
+                desc += f" ({streak_num} consecutive losses)"
+            by_player[pid]["items"].append(desc)
+        elif ptype == "streak_3":
+            by_player[pid]["items"].append("placed following week's bet (3 consecutive losses)")
+        elif ptype == "late":
+            by_player[pid]["items"].append("placed following week's bet (late pick)")
+        else:
+            by_player[pid]["items"].append("placed following week's bet")
+
+    for sl in compute_sole_losers(player_rows):
+        pid = sl["player_id"]
+        if pid not in by_player:
+            by_player[pid] = {"formal_name": sl["formal_name"], "items": []}
+        by_player[pid]["items"].append(f"only loser on the bet (week {sl['week_number']})")
+
+    if by_player:
+        lines.append("\U0001f4b8 *Penalties this period*")
+        lines.append("")
+        for p in by_player.values():
+            desc = " + ".join(p["items"])
+            lines.append(f"\U0001f4e3 {p['formal_name']}: {desc}")
+
+    return "\n".join(lines).rstrip()
+
+
+def _decimal_to_fractional(decimal_odds):
+    """Convert decimal odds to fractional string (e.g. 3.5 -> '5/2')."""
+    if not decimal_odds or decimal_odds <= 1:
+        return str(decimal_odds)
+    # Common fractional mappings
+    _map = {
+        1.5: "1/2", 1.25: "1/4", 1.33: "1/3", 1.4: "2/5",
+        2.0: "evens", 2.5: "6/4", 3.0: "2/1", 3.5: "5/2",
+        4.0: "3/1", 4.5: "7/2", 5.0: "4/1", 6.0: "5/1",
+        7.0: "6/1", 8.0: "7/1", 10.0: "9/1", 11.0: "10/1",
+    }
+    rounded = round(decimal_odds, 2)
+    if rounded in _map:
+        return _map[rounded]
+    # Generic: decimal - 1 as fraction
+    from fractions import Fraction
+    frac = Fraction(decimal_odds - 1).limit_denominator(20)
+    return f"{frac.numerator}/{frac.denominator}"
 
 
 def _join_names(names):

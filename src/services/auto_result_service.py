@@ -15,7 +15,7 @@ from src.services.fixture_service import get_fixture_by_api_id, refresh_fixture
 from src.services.pick_service import get_matched_picks_for_week
 from src.services.result_service import record_result, get_consecutive_losses, all_results_in
 from src.services.week_service import complete_week
-from src.services.penalty_service import suggest_penalty, PENALTY_THRESHOLDS, PENALTY_AMOUNTS
+from src.services.penalty_service import suggest_penalty, record_sole_loser_penalty, PENALTY_THRESHOLDS, PENALTY_AMOUNTS
 from src.services.stats_service import get_leaderboard
 from src.services.rotation_service import get_next_placer, add_to_penalty_queue
 import src.butler as butler
@@ -115,6 +115,7 @@ def auto_result_week(week_id):
         losers = [r for r in results if r["outcome"] == "loss"]
         if len(losers) == 1:
             add_to_penalty_queue(losers[0]["player_id"], "sole loser", week_id, front=True)
+            record_sole_loser_penalty(losers[0]["player_id"], week_id)
         leaderboard = get_leaderboard()
         next_placer = get_next_placer()
 
@@ -218,6 +219,7 @@ def auto_result_fixture(api_fixture_id, week_id):
         losers = [r for r in results if r["outcome"] == "loss"]
         if len(losers) == 1:
             add_to_penalty_queue(losers[0]["player_id"], "sole loser", week_id, front=True)
+            record_sole_loser_penalty(losers[0]["player_id"], week_id)
         leaderboard = get_leaderboard()
         next_placer = get_next_placer()
 

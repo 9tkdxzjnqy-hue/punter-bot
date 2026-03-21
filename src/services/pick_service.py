@@ -205,8 +205,15 @@ def re_enrich_unmatched_picks(week_id):
 
     enriched = 0
     for pick in unmatched:
-        enrichment = _try_enrich(pick["description"], pick["bet_type"],
-                                 sport=pick["sport"] or "football", include_started=True)
+        sport = pick["sport"] or "football"
+        # Try upcoming-only first (avoids matching a finished U18 match over
+        # an upcoming senior fixture with the same team name)
+        enrichment = _try_enrich(pick["description"], pick["bet_type"], sport=sport)
+        if not enrichment.get("api_fixture_id"):
+            # Fallback: include started/finished fixtures for picks where the
+            # correct fixture has already kicked off
+            enrichment = _try_enrich(pick["description"], pick["bet_type"],
+                                     sport=sport, include_started=True)
         if enrichment.get("api_fixture_id"):
             conn = get_db()
             conn.execute(

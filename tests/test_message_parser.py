@@ -118,6 +118,32 @@ class TestPickParsing:
         assert result["parsed_data"]["odds_original"] == "placer"
         assert result["parsed_data"]["bet_type"] == "btts"
 
+    def test_even_in_chat_not_parsed_as_pick(self):
+        """'even' (without s) must not match evens odds."""
+        result = parse_message(
+            "Probably only useful if it's last pick but even thats debatable as we will be quicker with updates",
+            "Aidan",
+        )
+        assert result["type"] == "general"
+
+    def test_question_with_vs_not_parsed_as_pick(self):
+        """Questions mentioning a fixture should not be picks."""
+        result = parse_message("Arsenal vs Chelsea this weekend?", "Kev")
+        assert result["type"] == "general"
+
+    def test_question_word_start_not_parsed_as_pick(self):
+        """Messages starting with question words should not be picks."""
+        result = parse_message("Is Chelsea going to win tomorrow?", "Kev")
+        assert result["type"] == "general"
+
+    def test_message_over_15_words_with_odds_not_a_pick(self):
+        """Chat messages over 15 words are rejected even if they contain a number."""
+        result = parse_message(
+            "lads what do you all think the score will be at 2.50 in the second half",
+            "Niall",
+        )
+        assert result["type"] == "general"
+
 
 class TestResultParsing:
     def test_win_result(self):

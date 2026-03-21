@@ -227,6 +227,11 @@ def _format_pick_line(pick):
     return f"{prefix}{pick['formal_name']} \u2014 {display} @ {odds}"
 
 
+def pick_removed(player):
+    """Confirm a player's pick has been removed."""
+    return f"Understood, {player['formal_name']}.  Your pick has been removed — you may resubmit before the Friday deadline."
+
+
 def bet_slip_received(player):
     """Confirm bet slip screenshot received from the placer."""
     return f"Thank you, {player['formal_name']}.  Bet slip received and recorded."

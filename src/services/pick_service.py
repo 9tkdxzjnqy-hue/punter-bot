@@ -334,6 +334,19 @@ def all_picks_in(week_id):
     return len(get_missing_players(week_id)) == 0
 
 
+def delete_player_pick(week_id, player_id):
+    """Delete a player's pick for a week. Returns True if a pick existed and was deleted."""
+    conn = get_db()
+    cursor = conn.execute(
+        "DELETE FROM picks WHERE week_id = ? AND player_id = ?",
+        (week_id, player_id),
+    )
+    deleted = cursor.rowcount > 0
+    conn.commit()
+    conn.close()
+    return deleted
+
+
 def get_player_pick(week_id, player_id):
     """Return a specific player's pick for a week, or None."""
     conn = get_db()

@@ -17,7 +17,7 @@ from src.services.week_service import (
 )
 from src.services.pick_service import (
     submit_pick, get_missing_players, all_picks_in, get_player_pick, get_picks_for_week,
-    get_picks_for_week_by_kickoff,
+    get_picks_for_week_by_kickoff, delete_player_pick,
 )
 from src.services.fixture_service import get_fixture_by_api_id
 from src.services.result_service import (
@@ -188,6 +188,9 @@ def handle_command(parsed):
     if command == "myphone":
         return _cmd_myphone(parsed)
 
+    if command == "removepick":
+        return _cmd_removepick(parsed)
+
     if command == "ping":
         return "pong"
 
@@ -247,6 +250,32 @@ def _cmd_rotation():
         data["last_placer"],
         data["last_week_number"],
     )
+
+
+def _cmd_removepick(parsed):
+    """!removepick — player removes their own pick for the current week."""
+    if not Config.TEST_MODE and not is_within_submission_window(_get_group_id()):
+        return "The submission window is currently closed."
+
+    player = lookup_player(
+        sender_phone=parsed.get("sender_phone", ""),
+        sender_name=parsed["sender"],
+    )
+    if not player:
+        return None
+
+    week = get_current_week(group_id=_get_group_id())
+    if not week:
+        return None
+
+    if week.get("placer_id"):
+        return "The bet has already been placed — picks are locked."
+
+    deleted = delete_player_pick(week["id"], player["id"])
+    if not deleted:
+        return "You have no pick recorded this week."
+
+    return butler.pick_removed(player)
 
 
 def _cmd_confirm(parsed, args):
@@ -566,6 +595,12 @@ def handle_cumulative_picks(cumulative):
     cumulative = list(by_player.values())
 
     week = get_or_create_current_week(group_id=_get_group_id())
+
+    # Once the bet is placed, picks are locked
+    if week.get("placer_id"):
+        logger.info("Cumulative picks ignored — bet already placed for week %s", week["id"])
+        return None
+
     replies = []
     first_pick_used = False
 
@@ -645,6 +680,11 @@ def handle_pick(parsed):
 
     # Get or create the current week
     week = get_or_create_current_week(group_id=_get_group_id())
+
+    # Once the bet is placed, picks are locked
+    if week.get("placer_id"):
+        logger.info("Pick ignored — bet already placed for week %s", week["id"])
+        return None
 
     # If the player already has a pick, ignore — they must use emoji prefix to update
     existing_pick = get_player_pick(week["id"], player["id"])

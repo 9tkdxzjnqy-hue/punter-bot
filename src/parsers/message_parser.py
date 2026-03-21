@@ -15,7 +15,7 @@ TEST_PREFIX = re.compile(
 # Odds patterns
 FRACTIONAL_ODDS = re.compile(r"\b(\d+/\d+)\b")
 DECIMAL_ODDS = re.compile(r"\b(\d+\.\d{1,2})\b")
-EVENS = re.compile(r"\bevens?\b", re.IGNORECASE)
+EVENS = re.compile(r"\bevens\b", re.IGNORECASE)
 
 # Result emojis
 WIN_EMOJI = "\u2705"  # green check
@@ -226,10 +226,19 @@ def gaa_needs_clarification(text):
     return False
 
 
+_QUESTION_START = re.compile(
+    r"^(is|are|do|does|did|will|can|could|would|should|who|what|where|when|how|any|anyone)\b",
+    re.IGNORECASE,
+)
+
+
 def _looks_like_pick(text):
     """Check if text looks like a pick (bet description) without explicit odds."""
     # Long messages are almost certainly chat, not picks
     if len(text.split()) > 15:
+        return False
+    # Questions are chat, not picks
+    if "?" in text or _QUESTION_START.match(text):
         return False
     # Bet type keywords (BTTS, handicap, over/under, ht/ft)
     for pattern in BET_TYPE_PATTERNS.values():
@@ -349,7 +358,7 @@ def _parse_result(text, sender, sender_phone="", emoji_map=None):
 def _parse_pick(text, sender, sender_phone=""):
     """Detect pick submissions containing odds."""
     # Long messages are chat, not picks — even if they contain number patterns
-    if len(text.split()) > 30:
+    if len(text.split()) > 15:
         return None
 
     odds_original = None

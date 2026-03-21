@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from src.db import get_db
 from src.services.pick_service import (
     submit_pick, get_picks_for_week, get_missing_players, all_picks_in, get_player_pick,
+    delete_player_pick,
 )
 from src.services.player_service import get_all_players
 from src.services.week_service import get_or_create_current_week
@@ -113,6 +114,25 @@ class TestGetPicks:
 
         pick = get_player_pick(week["id"], players[0]["id"])
         assert pick is None
+
+    def test_delete_existing_pick(self):
+        week = get_or_create_current_week()
+        players = get_all_players()
+        player = players[0]
+        submit_pick(player["id"], week["id"], "Arsenal BTTS", 2.5, "6/4", "btts")
+
+        deleted = delete_player_pick(week["id"], player["id"])
+
+        assert deleted is True
+        assert get_player_pick(week["id"], player["id"]) is None
+
+    def test_delete_nonexistent_pick_returns_false(self):
+        week = get_or_create_current_week()
+        players = get_all_players()
+
+        deleted = delete_player_pick(week["id"], players[0]["id"])
+
+        assert deleted is False
 
 
 class TestCrossSportFallback:

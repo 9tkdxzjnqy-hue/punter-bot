@@ -55,10 +55,11 @@ CREATE TABLE IF NOT EXISTS penalties (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     player_id INTEGER NOT NULL REFERENCES players(id),
     week_id INTEGER REFERENCES weeks(id),
-    type TEXT NOT NULL CHECK (type IN ('late', 'streak_3', 'streak_5', 'streak_7', 'streak_10')),
+    type TEXT NOT NULL CHECK (type IN ('late', 'streak_3', 'streak_5', 'streak_7', 'streak_10', 'sole_loser')),
     amount REAL NOT NULL DEFAULT 0,
     status TEXT NOT NULL DEFAULT 'suggested' CHECK (status IN ('suggested', 'confirmed', 'paid')),
     confirmed_by TEXT,
+    notes TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

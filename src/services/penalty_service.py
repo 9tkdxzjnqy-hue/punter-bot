@@ -94,6 +94,7 @@ def confirm_penalty(penalty_id, confirmed_by=""):
 def record_sole_loser_penalty(player_id, week_id):
     """
     Record an auto-confirmed sole-loser penalty (no vault contribution).
+    Stores the week's potential_return in notes for later reference.
     Idempotent — silently skips if already recorded.
     """
     conn = get_db()
@@ -102,10 +103,15 @@ def record_sole_loser_penalty(player_id, week_id):
         (player_id, week_id),
     ).fetchone()
     if not existing:
+        slip = conn.execute(
+            "SELECT potential_return FROM bet_slips WHERE week_id = ?",
+            (week_id,),
+        ).fetchone()
+        notes = f"potential_return={slip['potential_return']}" if slip else None
         conn.execute(
-            "INSERT INTO penalties (player_id, week_id, type, amount, status, confirmed_by, created_at) "
-            "VALUES (?, ?, 'sole_loser', 0, 'confirmed', 'auto', ?)",
-            (player_id, week_id, datetime.utcnow().isoformat()),
+            "INSERT INTO penalties (player_id, week_id, type, amount, status, confirmed_by, notes, created_at) "
+            "VALUES (?, ?, 'sole_loser', 0, 'confirmed', 'auto', ?, ?)",
+            (player_id, week_id, notes, datetime.utcnow().isoformat()),
         )
         conn.commit()
     conn.close()

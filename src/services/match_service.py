@@ -19,7 +19,7 @@ from src.services.fixture_service import get_upcoming_fixtures
 logger = logging.getLogger(__name__)
 
 # Minimum similarity score for fuzzy matching (0-1)
-FUZZY_THRESHOLD = 0.6
+FUZZY_THRESHOLD = 0.8
 
 
 def match_pick(description, bet_type="win", sport="football", include_started=False):

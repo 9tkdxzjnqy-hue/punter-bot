@@ -102,18 +102,25 @@ def webhook():
         if len(cumulative) >= 1:
             reply = handle_cumulative_picks(cumulative)
         else:
-            # Fall back to single-message parsing (pass emoji_map for emoji-based results)
-            parsed = parse_message(body, sender, sender_phone, emoji_map=emoji_map)
-            logger.info("Parsed as: %s (sender: %s)", parsed["type"], parsed["sender"])
-            if parsed["type"] == "command":
-                reply = handle_command(parsed)
-            elif parsed["type"] == "pick":
-                reply = handle_pick(parsed)
-            elif parsed["type"] == "result":
-                reply = handle_result(parsed)
+            # Check bet placement BEFORE pick parsing — bet365 share links contain
+            # "bet slip" in the WhatsApp preview text and would otherwise be parsed
+            # as picks and rejected with "submission window closed"
+            if _looks_like_bet_placed(body):
+                reply = _handle_placer_bet_confirmation(sender, sender_phone, body)
 
-    # Screenshot or confirmation text from next placer = bet placed (all picks in)
-    if not reply and (has_media or _looks_like_bet_placed(body)):
+            if not reply:
+                # Fall back to single-message parsing (pass emoji_map for emoji-based results)
+                parsed = parse_message(body, sender, sender_phone, emoji_map=emoji_map)
+                logger.info("Parsed as: %s (sender: %s)", parsed["type"], parsed["sender"])
+                if parsed["type"] == "command":
+                    reply = handle_command(parsed)
+                elif parsed["type"] == "pick":
+                    reply = handle_pick(parsed)
+                elif parsed["type"] == "result":
+                    reply = handle_result(parsed)
+
+    # Screenshot from the designated placer = bet placed (all picks in)
+    if not reply and has_media:
         reply = _handle_placer_bet_confirmation(sender, sender_phone, body)
 
     # Banter: disabled in main group for now — shadow mode only
@@ -328,9 +335,10 @@ def _looks_like_bet_placed(text):
 
 def _handle_placer_bet_confirmation(sender, sender_phone, body=""):
     """
-    When all picks are in, if the next placer posts a screenshot or confirmation text,
-    record the bet as placed. Admin can also forward the placer's screenshot — we record
-    the next placer. Will be enhanced with OCR when screenshot recognition is implemented.
+    When all picks are in, if the designated placer posts a screenshot or
+    confirmation text, record the bet as placed.
+    Only the designated placer is accepted — open delegation invites false
+    positives when others ask questions containing confirmation keywords.
     """
     from src.parsers.message_parser import extract_test_prefix
 
@@ -354,9 +362,9 @@ def _handle_placer_bet_confirmation(sender, sender_phone, body=""):
     if not next_placer:
         return None
 
-    # Accept from any known player — the designated placer may delegate to someone else
-    player = lookup_player(sender_phone=sender_phone, sender_name=sender)
-    if not player and not _is_authorized_admin({"sender": sender, "sender_phone": sender_phone}):
+    # Only accept from the designated placer
+    sender_player = lookup_player(sender_phone=sender_phone, sender_name=sender)
+    if not sender_player or sender_player["id"] != next_placer["id"]:
         return None
 
     advance_rotation(week["id"], next_placer["id"])
@@ -842,15 +850,19 @@ def test_webhook():
             if len(cumulative) >= 1:
                 reply = handle_cumulative_picks(cumulative)
             else:
-                parsed = parse_message(body, sender, sender_phone, emoji_map=emoji_map)
-                if parsed["type"] == "command":
-                    reply = handle_command(parsed)
-                elif parsed["type"] == "pick":
-                    reply = handle_pick(parsed)
-                elif parsed["type"] == "result":
-                    reply = handle_result(parsed)
+                if _looks_like_bet_placed(body):
+                    reply = _handle_placer_bet_confirmation(sender, sender_phone, body)
 
-        if not reply and (has_media or _looks_like_bet_placed(body)):
+                if not reply:
+                    parsed = parse_message(body, sender, sender_phone, emoji_map=emoji_map)
+                    if parsed["type"] == "command":
+                        reply = handle_command(parsed)
+                    elif parsed["type"] == "pick":
+                        reply = handle_pick(parsed)
+                    elif parsed["type"] == "result":
+                        reply = handle_result(parsed)
+
+        if not reply and has_media:
             reply = _handle_placer_bet_confirmation(sender, sender_phone, body)
 
         if not reply and body.strip():

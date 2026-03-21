@@ -342,8 +342,8 @@ class TestCumulativePickWebhook:
         assert "Mr Kevin" in data["reply"]
         assert "Bet slip received" in data["reply"]
 
-    def test_admin_forwarding_placer_screenshot_records_bet(self, test_db, monkeypatch):
-        """When Ed forwards the placer's screenshot, record the bet as placed."""
+    def test_non_placer_screenshot_ignored(self, test_db, monkeypatch):
+        """Only the designated placer can confirm — another player's screenshot is ignored."""
         _seed_player_emojis()
         monkeypatch.setattr("src.app.is_within_submission_window", lambda group_id="default": True)
         monkeypatch.setattr("src.config.Config.GROUP_CHAT_ID", "test-group@g.us")
@@ -366,13 +366,13 @@ class TestCumulativePickWebhook:
         placer = get_next_placer()
         assert placer["nickname"] == "Kev"
 
-        # Ed reposts/forwards the placer's screenshot (sender is Ed, not Kev)
+        # Ed posts a screenshot — not the designated placer, should be ignored
         resp = client.post(
             "/webhook",
             json={
                 "sender": "Edmund",
                 "sender_phone": "",
-                "body": "Ed: ",
+                "body": "",
                 "group_id": "test-group@g.us",
                 "has_media": True,
             },
@@ -381,9 +381,7 @@ class TestCumulativePickWebhook:
 
         assert resp.status_code == 200
         data = resp.get_json()
-        assert data["action"] == "replied"
-        assert "Mr Kevin" in data["reply"]
-        assert "Bet slip received" in data["reply"]
+        assert data["action"] == "no_reply"
 
 
 class TestPickUpdateGuardrails:

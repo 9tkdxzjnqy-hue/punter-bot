@@ -73,14 +73,23 @@ def webhook():
     has_media = data.get("has_media", False)
     message_id = data.get("message_id", "")
 
-    # Store group_id on Flask g for request-scoped access by handlers
-    g.group_id = group_id
+    # Determine if this message originates from the shadow/admin console group
+    from_shadow = bool(Config.SHADOW_GROUP_ID and group_id == Config.SHADOW_GROUP_ID)
 
-    # Only process messages from our group(s)
+    # Allow shadow group in addition to configured main groups
     allowed = Config.GROUP_CHAT_IDS if Config.GROUP_CHAT_IDS else ([Config.GROUP_CHAT_ID] if Config.GROUP_CHAT_ID else [])
-    if allowed and group_id not in allowed:
-        logger.info("Ignored: wrong group (expected one of %s, got %s)", allowed, group_id)
+    all_allowed = list(allowed) + ([Config.SHADOW_GROUP_ID] if Config.SHADOW_GROUP_ID else [])
+    if all_allowed and group_id not in all_allowed:
+        logger.info("Ignored: wrong group (expected one of %s, got %s)", all_allowed, group_id)
         return jsonify({"action": "ignored", "reason": "wrong group"})
+
+    # Shadow-originated commands operate on main group data but reply to shadow only
+    if from_shadow:
+        main_group = Config.GROUP_CHAT_ID or (Config.GROUP_CHAT_IDS[0] if Config.GROUP_CHAT_IDS else "default")
+        g.group_id = main_group
+        logger.info("Shadow console: %s operating on main group data", sender)
+    else:
+        g.group_id = group_id
 
     logger.info("Message from %s: %s", sender, body[:100])
 
@@ -131,14 +140,14 @@ def webhook():
     if reply:
         send_message(group_id, reply)
 
-        # Shadow mode: also send LLM-enhanced version to the shadow group
-        if Config.SHADOW_GROUP_ID:
+        # Mirror to shadow for monitoring — only when triggered from main group (not shadow itself)
+        if not from_shadow and Config.SHADOW_GROUP_ID:
             _shadow_message(sender, body, reply, group_id)
 
         return jsonify({"action": "replied", "reply": reply})
 
-    # No structured reply — shadow banter for Brian stirring or bot mentions only
-    if Config.SHADOW_GROUP_ID and body.strip() and ((_is_brian(sender) and _brian_is_stirring(body)) or _BANTER_TRIGGERS.search(body)):
+    # Shadow banter — only for main group messages (avoid loops)
+    if not from_shadow and Config.SHADOW_GROUP_ID and body.strip() and ((_is_brian(sender) and _brian_is_stirring(body)) or _BANTER_TRIGGERS.search(body)):
         _shadow_banter(sender, sender_phone, body)
 
     return jsonify({"action": "no_reply"})

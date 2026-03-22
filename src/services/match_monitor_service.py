@@ -213,6 +213,55 @@ def _record_event_if_new(fixture_api_id, event_key, event_type, detail=None):
         conn.close()
 
 
+def _collect_new_events(fixture):
+    """
+    Collect new (unposted) events from a fixture as structured dicts.
+    Records each event in the DB for dedup (same mechanism as _post_new_events).
+
+    Returns a list of event dicts, each with:
+        event_type, home_score, away_score, player, minute, detail
+    """
+    raw = fixture.get("raw_json")
+    if not raw:
+        return []
+
+    import json
+    try:
+        data = json.loads(raw) if isinstance(raw, str) else raw
+    except (json.JSONDecodeError, TypeError):
+        return []
+
+    events = extract_events(data)
+    api_id = fixture["api_id"]
+    home_team = fixture.get("home_team", "")
+
+    running_home = 0
+    running_away = 0
+    new_events = []
+
+    for ev in events:
+        if ev["event_type"] == "Goal":
+            is_own_goal = ev.get("detail") == "Own Goal"
+            home_scored = (ev.get("team") == home_team) != is_own_goal
+            if home_scored:
+                running_home += 1
+            else:
+                running_away += 1
+
+        if _record_event_if_new(api_id, ev["event_key"], ev["event_type"], ev.get("detail")):
+            new_events.append({
+                "event_type": ev["event_type"],
+                "home_score": running_home,
+                "away_score": running_away,
+                "player": ev["player"],
+                "minute": ev["minute"],
+                "detail": ev.get("detail"),
+            })
+            logger.info("Collected event: %s %s", ev["event_key"], home_team)
+
+    return new_events
+
+
 def get_unresulted_picks_for_week(week_id):
     """
     Get matched picks for the current week that don't have a result yet.

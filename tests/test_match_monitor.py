@@ -8,6 +8,7 @@ from src.services.match_monitor_service import (
     poll_fixtures,
     get_unresulted_picks_for_week,
     _record_event_if_new,
+    _collect_new_events,
 )
 from src.services.auto_result_service import auto_result_fixture, COMPLETED_STATUSES
 from src.services.pick_service import submit_pick
@@ -634,3 +635,235 @@ class TestGoalScoreAtMoment:
         assert len(own_goal_msgs) == 1
         # Liverpool OG → away (Arsenal) scores: Liverpool 0-1 Arsenal
         assert "Liverpool 0-1 Arsenal" in own_goal_msgs[0]
+
+
+# --- Tests: _collect_new_events ---
+
+class TestCollectNewEvents:
+    def test_returns_event_dicts(self):
+        events = [
+            {"type": "Goal", "detail": "Normal Goal", "time": {"elapsed": 23},
+             "team": {"name": "Liverpool"}, "player": {"name": "Salah"}},
+        ]
+        data = _make_fixture_data(api_id=80001, events=events, status="1H")
+        fixture = {
+            "api_id": 80001,
+            "home_team": "Liverpool",
+            "away_team": "Arsenal",
+            "raw_json": json.dumps(data),
+        }
+        new_events = _collect_new_events(fixture)
+        assert len(new_events) == 1
+        assert new_events[0]["event_type"] == "Goal"
+        assert new_events[0]["player"] == "Salah"
+        assert new_events[0]["home_score"] == 1
+        assert new_events[0]["away_score"] == 0
+
+    def test_deduplicates_already_seen_events(self):
+        events = [
+            {"type": "Goal", "detail": "Normal Goal", "time": {"elapsed": 30},
+             "team": {"name": "Liverpool"}, "player": {"name": "Diaz"}},
+        ]
+        data = _make_fixture_data(api_id=80002, events=events, status="1H")
+        fixture = {
+            "api_id": 80002,
+            "home_team": "Liverpool",
+            "away_team": "Arsenal",
+            "raw_json": json.dumps(data),
+        }
+        first = _collect_new_events(fixture)
+        assert len(first) == 1
+        # Second call — event already in DB, not returned again
+        second = _collect_new_events(fixture)
+        assert len(second) == 0
+
+    def test_running_score_tracks_all_goals(self):
+        """Score in each event dict must reflect cumulative goals up to that point."""
+        events = [
+            {"type": "Goal", "detail": "Normal Goal", "time": {"elapsed": 10},
+             "team": {"name": "Arsenal"}, "player": {"name": "Saka"}},
+            {"type": "Goal", "detail": "Normal Goal", "time": {"elapsed": 20},
+             "team": {"name": "Liverpool"}, "player": {"name": "Salah"}},
+            {"type": "Goal", "detail": "Normal Goal", "time": {"elapsed": 30},
+             "team": {"name": "Liverpool"}, "player": {"name": "Núñez"}},
+        ]
+        data = _make_fixture_data(api_id=80003, events=events, status="1H",
+                                   home="Liverpool", away="Arsenal")
+        fixture = {
+            "api_id": 80003,
+            "home_team": "Liverpool",
+            "away_team": "Arsenal",
+            "raw_json": json.dumps(data),
+        }
+        new_events = _collect_new_events(fixture)
+        assert len(new_events) == 3
+        assert (new_events[0]["home_score"], new_events[0]["away_score"]) == (0, 1)  # Saka
+        assert (new_events[1]["home_score"], new_events[1]["away_score"]) == (1, 1)  # Salah
+        assert (new_events[2]["home_score"], new_events[2]["away_score"]) == (2, 1)  # Núñez
+
+    def test_red_card_returned(self):
+        events = [
+            {"type": "Card", "detail": "Red Card", "time": {"elapsed": 55},
+             "team": {"name": "Arsenal"}, "player": {"name": "Rice"}},
+        ]
+        data = _make_fixture_data(api_id=80004, events=events, status="2H")
+        fixture = {
+            "api_id": 80004,
+            "home_team": "Liverpool",
+            "away_team": "Arsenal",
+            "raw_json": json.dumps(data),
+        }
+        new_events = _collect_new_events(fixture)
+        assert len(new_events) == 1
+        assert new_events[0]["event_type"] == "RedCard"
+        assert new_events[0]["player"] == "Rice"
+
+
+# --- Tests: butler.match_event_bundle ---
+
+class TestMatchEventBundle:
+    def test_single_fixture_single_event_uses_full_format(self):
+        """One event, one fixture → full format with team names, no header."""
+        msg = butler.match_event_bundle({
+            ("Liverpool", "Arsenal"): [{
+                "event_type": "Goal",
+                "home_score": 1, "away_score": 0,
+                "player": "Salah", "minute": 23,
+                "detail": "Normal Goal",
+            }]
+        })
+        assert "Liverpool 1-0 Arsenal" in msg
+        assert "Salah" in msg
+        assert "23'" in msg
+        assert "Liverpool vs Arsenal" not in msg  # no header
+
+    def test_single_ft_uses_match_ended_format(self):
+        """Single FT event → full match_ended format."""
+        msg = butler.match_event_bundle({
+            ("Liverpool", "Arsenal"): [{
+                "event_type": "FT",
+                "home_score": 2, "away_score": 1,
+                "player": None, "minute": None, "detail": None,
+            }]
+        })
+        assert msg == "FT: Liverpool 2-1 Arsenal"
+
+    def test_single_fixture_multiple_events_has_header(self):
+        """Multiple events for one fixture → header + brief lines."""
+        msg = butler.match_event_bundle({
+            ("Liverpool", "Arsenal"): [
+                {"event_type": "Goal", "home_score": 1, "away_score": 0,
+                 "player": "Salah", "minute": 23, "detail": "Normal Goal"},
+                {"event_type": "Goal", "home_score": 2, "away_score": 0,
+                 "player": "Núñez", "minute": 58, "detail": "Normal Goal"},
+            ]
+        })
+        assert "Liverpool vs Arsenal" in msg
+        assert "Salah" in msg
+        assert "Núñez" in msg
+        # Brief lines should NOT contain team names
+        lines = msg.split("\n")
+        event_lines = [l for l in lines if "Salah" in l or "Núñez" in l]
+        for line in event_lines:
+            assert "Liverpool" not in line
+            assert "Arsenal" not in line
+
+    def test_multiple_fixtures_each_has_header(self):
+        """Two fixtures → two sections, each with a fixture header."""
+        msg = butler.match_event_bundle({
+            ("Liverpool", "Arsenal"): [
+                {"event_type": "Goal", "home_score": 1, "away_score": 0,
+                 "player": "Salah", "minute": 52, "detail": "Normal Goal"},
+            ],
+            ("Man Utd", "Chelsea"): [
+                {"event_type": "Goal", "home_score": 1, "away_score": 0,
+                 "player": "Rashford", "minute": 54, "detail": "Normal Goal"},
+            ],
+        })
+        assert "Liverpool vs Arsenal" in msg
+        assert "Man Utd vs Chelsea" in msg
+        assert "Salah" in msg
+        assert "Rashford" in msg
+
+    def test_ft_in_multi_event_bundle_uses_brief_format(self):
+        """FT event alongside goals → brief FT format (no team names)."""
+        msg = butler.match_event_bundle({
+            ("Liverpool", "Arsenal"): [
+                {"event_type": "Goal", "home_score": 1, "away_score": 0,
+                 "player": "Salah", "minute": 23, "detail": "Normal Goal"},
+                {"event_type": "FT", "home_score": 1, "away_score": 0,
+                 "player": None, "minute": None, "detail": None},
+            ]
+        })
+        assert "FT: 1-0" in msg
+        # Full FT format should NOT appear
+        assert "FT: Liverpool" not in msg
+
+    def test_red_card_in_bundle(self):
+        """Red card formatted with 🟥 emoji."""
+        msg = butler.match_event_bundle({
+            ("Liverpool", "Arsenal"): [
+                {"event_type": "RedCard", "home_score": 0, "away_score": 0,
+                 "player": "Rice", "minute": 68, "detail": None},
+            ]
+        })
+        # Single event → full format
+        assert "Rice" in msg
+        assert "68'" in msg
+        assert "Red Card" in msg
+
+    def test_standalone_ht_uses_full_format(self):
+        """Single HT event → full format with team names and (HT) suffix."""
+        msg = butler.match_event_bundle({
+            ("Liverpool", "Arsenal"): [
+                {"event_type": "HT", "home_score": 0, "away_score": 0,
+                 "player": None, "minute": None, "detail": None},
+            ]
+        })
+        assert msg == "Liverpool 0-0 Arsenal (HT)"
+
+    def test_ht_in_multi_event_bundle_uses_brief_format(self):
+        """HT alongside a goal → brief HT line."""
+        msg = butler.match_event_bundle({
+            ("Liverpool", "Arsenal"): [
+                {"event_type": "Goal", "home_score": 1, "away_score": 0,
+                 "player": "Salah", "minute": 45, "detail": "Normal Goal"},
+                {"event_type": "HT", "home_score": 1, "away_score": 0,
+                 "player": None, "minute": None, "detail": None},
+            ]
+        })
+        assert "Liverpool vs Arsenal" in msg
+        assert "HT: 1-0" in msg
+        assert "Salah" in msg
+
+    def test_quiet_simultaneous_fixture_shows_score(self):
+        """Score event for quiet simultaneous fixture → bare score under header."""
+        msg = butler.match_event_bundle({
+            ("Liverpool", "Arsenal"): [
+                {"event_type": "Goal", "home_score": 1, "away_score": 0,
+                 "player": "Salah", "minute": 52, "detail": "Normal Goal"},
+            ],
+            ("Man Utd", "Chelsea"): [
+                {"event_type": "Score", "home_score": 0, "away_score": 0,
+                 "player": None, "minute": None, "detail": None},
+            ],
+        })
+        assert "Liverpool vs Arsenal" in msg
+        assert "Salah" in msg
+        assert "Man Utd vs Chelsea" in msg
+        assert "0-0" in msg
+
+    def test_ht_score_bundle_format(self):
+        """HT in multi-fixture bundle uses brief HT: format."""
+        msg = butler.match_event_bundle({
+            ("Liverpool", "Arsenal"): [
+                {"event_type": "Goal", "home_score": 1, "away_score": 0,
+                 "player": "Salah", "minute": 23, "detail": "Normal Goal"},
+            ],
+            ("Man Utd", "Chelsea"): [
+                {"event_type": "HT", "home_score": 0, "away_score": 1,
+                 "player": None, "minute": None, "detail": None},
+            ],
+        })
+        assert "Man Utd vs Chelsea" in msg
+        assert "HT: 0-1" in msg

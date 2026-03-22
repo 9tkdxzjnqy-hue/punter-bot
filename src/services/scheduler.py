@@ -143,155 +143,309 @@ def init_scheduler(send_message_fn):
 
 def schedule_match_monitor(fixture_api_id, kickoff_iso, week_id, sport=None):
     """
-    Schedule polling jobs for a fixture's match window.
-
-    Creates interval jobs that poll the fixture from kickoff through
-    kickoff + 2.5h (every 10 min), then kickoff + 3.5h (every 30 min).
-
-    If kickoff is in the past, schedules immediately at the appropriate interval.
+    Ensure the week-level monitor is scheduled for this fixture's week.
+    Thin wrapper — all fixtures for a week are polled together by one job.
 
     Args:
-        fixture_api_id: API-Football fixture ID.
-        kickoff_iso: ISO-format kickoff timestamp.
+        fixture_api_id: API-Football fixture ID (used for logging only).
+        kickoff_iso: ISO-format kickoff timestamp (unused; week monitor queries DB).
         week_id: current week ID.
-        sport: Sport name — prevents cross-sport fixture collisions.
+        sport: Sport name (unused; week monitor reads sport from picks).
     """
     if not Config.MATCH_MONITOR_ENABLED:
         logger.debug("Match monitor disabled, not scheduling fixture %s", fixture_api_id)
         return
+    schedule_week_monitor(week_id)
 
-    if not _scheduler:
-        logger.warning("Scheduler not initialized, cannot schedule monitor")
+
+def schedule_week_monitor(week_id):
+    """
+    Schedule (or update) a single week-level monitor job.
+
+    One job per week polls all active fixtures together and sends one bundled
+    message per poll cycle. Replaces per-fixture monitor jobs.
+    """
+    if not Config.MATCH_MONITOR_ENABLED or not _scheduler:
+        return
+
+    from src.services.match_monitor_service import get_unresulted_picks_for_week
+
+    picks = get_unresulted_picks_for_week(week_id)
+    if not picks:
+        logger.debug("No unresulted picks for week %s, not scheduling monitor", week_id)
         return
 
     tz = pytz.timezone(Config.TIMEZONE)
-    try:
-        kickoff = datetime.fromisoformat(kickoff_iso)
-        if kickoff.tzinfo is None:
-            kickoff = tz.localize(kickoff)
-    except (ValueError, TypeError):
-        logger.warning("Invalid kickoff time: %s", kickoff_iso)
-        return
-
     now = datetime.now(tz)
-    match_end = kickoff + timedelta(hours=MATCH_WINDOW_HOURS)
-    extra_end = match_end + timedelta(hours=EXTRA_TIME_HOURS)
+    job_id = f"week_monitor_{week_id}"
 
-    # Don't schedule if the match window has fully passed
-    if now > extra_end:
-        logger.info("Fixture %s past monitoring window, skipping", fixture_api_id)
-        return
+    # Find earliest future kickoff among unstarted fixtures
+    earliest_future_ko = None
+    for pick in picks:
+        kickoff_str = pick.get("kickoff")
+        if not kickoff_str:
+            continue
+        try:
+            ko = datetime.fromisoformat(kickoff_str)
+            if ko.tzinfo is None:
+                ko = tz.localize(ko)
+        except (ValueError, TypeError):
+            continue
+        if ko > now and (earliest_future_ko is None or ko < earliest_future_ko):
+            earliest_future_ko = ko
 
-    job_id = f"monitor_{fixture_api_id}_{week_id}"
+    # If any fixtures are already live, start immediately; otherwise wait for kickoff
+    start_time = (
+        earliest_future_ko
+        if (earliest_future_ko and earliest_future_ko > now)
+        else now + timedelta(seconds=30)
+    )
 
-    # Remove existing job for this fixture if any
+    # Leave the existing job alone if it fires earlier than what we'd schedule
     existing = _scheduler.get_job(job_id)
-    if existing:
-        logger.info("Monitor already scheduled for fixture %s", fixture_api_id)
+    if existing and existing.next_run_time and existing.next_run_time <= start_time:
+        logger.debug("Week monitor already scheduled for week %s at %s",
+                     week_id, existing.next_run_time.isoformat())
         return
-
-    # Schedule the first poll
-    if now < kickoff:
-        # Match hasn't started — first poll at kickoff
-        start_time = kickoff
-    else:
-        # Match is already underway — poll immediately
-        start_time = now + timedelta(seconds=30)
 
     _scheduler.add_job(
-        _job_monitor_fixture,
+        _job_monitor_week,
         "date",
         run_date=start_time,
-        args=[fixture_api_id, week_id, 0, sport],
+        args=[week_id],
         id=job_id,
+        replace_existing=True,
         misfire_grace_time=300,
     )
-    logger.info("Scheduled monitor for fixture %s at %s (week %s, sport=%s)",
-                fixture_api_id, start_time.isoformat(), week_id, sport)
+    logger.info("Scheduled week monitor for week %s at %s", week_id, start_time.isoformat())
 
 
 def schedule_monitors_for_week(week_id):
     """
-    Schedule monitors for all unresulted matched picks in a week.
+    Schedule the week monitor for all unresulted matched picks in a week.
     Called on startup to recover from restarts.
     """
     if not Config.MATCH_MONITOR_ENABLED:
         return
 
+    schedule_week_monitor(week_id)
+
     from src.services.match_monitor_service import get_unresulted_picks_for_week
     picks = get_unresulted_picks_for_week(week_id)
-
-    for pick in picks:
-        schedule_match_monitor(pick["api_fixture_id"], pick["kickoff"], week_id, sport=pick.get("sport"))
-
     if picks:
-        logger.info("Startup: scheduled %d match monitors for week %s", len(picks), week_id)
+        logger.info("Startup: scheduled week monitor for week %s (%d picks)", week_id, len(picks))
 
 
-def _job_monitor_fixture(fixture_api_id, week_id, poll_count, sport=None):
+def _job_monitor_week(week_id):
     """
-    Single poll of a fixture. Posts events, checks for FT, and
-    reschedules the next poll if the match isn't finished.
+    Poll all active fixtures for the week in one job.
+    Bundles all new events into a single message per cycle.
+    Reschedules itself until all fixtures complete.
     """
     try:
-        from src.services.match_monitor_service import poll_fixtures
-        results = poll_fixtures([fixture_api_id], week_id, _send_fn, sport=sport)
-        status = results.get(fixture_api_id, "error")
+        from src.services.match_monitor_service import (
+            get_unresulted_picks_for_week,
+            _collect_new_events,
+            _record_event_if_new,
+        )
+        from src.services.fixture_service import get_fixture_by_api_id, refresh_fixture
+        from src.services.auto_result_service import auto_result_fixture, COMPLETED_STATUSES
+        from src.services.result_service import week_has_loss
+
+        if not Config.MATCH_MONITOR_ENABLED:
+            return
+
+        target_group = Config.MATCH_MONITOR_GROUP_ID or Config.SHADOW_GROUP_ID
+        if not target_group:
+            logger.warning("No target group configured for match monitor")
+            return
 
         tz = pytz.timezone(Config.TIMEZONE)
         now = datetime.now(tz)
 
-        if status == "completed":
-            logger.info("Fixture %s completed, monitor done", fixture_api_id)
+        picks = get_unresulted_picks_for_week(week_id)
+        if not picks:
+            logger.info("Week monitor %s: no unresulted picks, stopping", week_id)
             return
 
-        if status == "skipped":
+        # Deduplicate picks by fixture api_id
+        seen = {}
+        for pick in picks:
+            api_id = pick["api_fixture_id"]
+            if api_id not in seen:
+                seen[api_id] = pick
+
+        acca_alive = not week_has_loss(week_id)
+
+        # Refresh all live (non-NS) fixtures before processing
+        for api_id, pick in seen.items():
+            sport = pick.get("sport")
+            fixture = get_fixture_by_api_id(api_id, sport=sport)
+            if fixture and fixture.get("status", "NS") not in ("NS", "TBD"):
+                refresh_fixture(api_id, sport=sport)
+
+        # Collect events, detect HT, and track currently live fixtures
+        fixture_events_map = {}  # (home, away) -> [event_dicts]
+        completed_fixtures = []
+        live_keys = set()  # fixture keys currently in play (not NS/TBD/completed)
+
+        for api_id, pick in seen.items():
+            sport = pick.get("sport")
+            fixture = get_fixture_by_api_id(api_id, sport=sport)
+            if not fixture:
+                continue
+
+            status = fixture.get("status", "NS")
+            if status in ("NS", "TBD"):
+                continue  # Not started yet — will be picked up in a later poll
+
+            home = fixture.get("home_team", "")
+            away = fixture.get("away_team", "")
+            key = (home, away)
+
+            if status not in COMPLETED_STATUSES:
+                live_keys.add(key)
+
+            # Collect new goals/red cards
+            if acca_alive and fixture.get("raw_json"):
+                events = _collect_new_events(fixture)
+                if events:
+                    fixture_events_map.setdefault(key, []).extend(events)
+
+            # Halftime score — post once per fixture (deduped)
+            if acca_alive and status == "HT":
+                ht_event_key = f"HT_{api_id}"
+                if _record_event_if_new(api_id, ht_event_key, "HT", "Half Time"):
+                    fixture_events_map.setdefault(key, []).append({
+                        "event_type": "HT",
+                        "home_score": fixture.get("home_score") or 0,
+                        "away_score": fixture.get("away_score") or 0,
+                        "player": None, "minute": None, "detail": None,
+                    })
+
+            # FT: trigger auto-result but don't add to bundle — result announcement covers it
+            if status in COMPLETED_STATUSES:
+                completed_fixtures.append(api_id)
+
+        # Simultaneous fixtures: when bundle fires, include current score for quiet ones
+        if len(live_keys) >= 2 and fixture_events_map:
+            for api_id, pick in seen.items():
+                sport = pick.get("sport")
+                fixture = get_fixture_by_api_id(api_id, sport=sport)
+                if not fixture:
+                    continue
+                status = fixture.get("status", "NS")
+                if status in ("NS", "TBD") or status in COMPLETED_STATUSES:
+                    continue
+                home = fixture.get("home_team", "")
+                away = fixture.get("away_team", "")
+                key = (home, away)
+                if key not in fixture_events_map:
+                    fixture_events_map[key] = [{
+                        "event_type": "Score",
+                        "home_score": fixture.get("home_score") or 0,
+                        "away_score": fixture.get("away_score") or 0,
+                        "player": None, "minute": None, "detail": None,
+                    }]
+
+        # Send one bundled message for all events/scores this cycle
+        if fixture_events_map:
+            msg = butler.match_event_bundle(fixture_events_map)
+            if msg:
+                _send_fn(target_group, msg)
+
+        # Trigger auto-result for completed fixtures (always, even if acca dead)
+        for api_id in completed_fixtures:
+            announcements = auto_result_fixture(api_id, week_id)
+            for msg in announcements:
+                _send_fn(target_group, msg)
+
+        # Stop if nothing left to watch
+        remaining = get_unresulted_picks_for_week(week_id)
+        if not remaining:
+            logger.info("Week monitor %s: all fixtures completed, stopping", week_id)
             return
 
-        # Determine next poll interval
-        from src.services.fixture_service import get_fixture_by_api_id
-        fixture = get_fixture_by_api_id(fixture_api_id, sport=sport)
-        if fixture and fixture.get("kickoff"):
-            try:
-                kickoff = datetime.fromisoformat(fixture["kickoff"])
-                if kickoff.tzinfo is None:
-                    kickoff = tz.localize(kickoff)
-            except (ValueError, TypeError):
-                kickoff = now - timedelta(hours=2)
-
-            match_end = kickoff + timedelta(hours=MATCH_WINDOW_HOURS)
-            extra_end = match_end + timedelta(hours=EXTRA_TIME_HOURS)
-
-            if now > extra_end:
-                logger.info("Fixture %s past extra time window, stopping monitor", fixture_api_id)
-                return
-
-            if now > match_end:
-                interval = POLL_INTERVAL_EXTRA
-            else:
-                interval = POLL_INTERVAL_LIVE
-        else:
-            interval = POLL_INTERVAL_LIVE
-
-        # Schedule next poll
-        next_poll = now + timedelta(minutes=interval)
-        next_count = poll_count + 1
-        job_id = f"monitor_{fixture_api_id}_{week_id}"
-
+        # Reschedule based on what's still active
+        next_poll = _next_week_poll_time(remaining, now, tz)
+        job_id = f"week_monitor_{week_id}"
         _scheduler.add_job(
-            _job_monitor_fixture,
+            _job_monitor_week,
             "date",
             run_date=next_poll,
-            args=[fixture_api_id, week_id, next_count, sport],
+            args=[week_id],
             id=job_id,
             replace_existing=True,
             misfire_grace_time=300,
         )
-        logger.debug("Next poll for fixture %s at %s (poll #%d)",
-                      fixture_api_id, next_poll.isoformat(), next_count)
+        logger.debug("Week monitor %s: next poll at %s", week_id, next_poll.isoformat())
 
     except Exception:
-        logger.exception("Error in monitor job for fixture %s", fixture_api_id)
+        logger.exception("Error in week monitor job for week %s", week_id)
+
+
+def _next_week_poll_time(picks, now, tz):
+    """
+    Calculate when to schedule the next week monitor poll.
+
+    - Live fixtures within match window   → POLL_INTERVAL_LIVE
+    - Live fixtures all past match window → POLL_INTERVAL_EXTRA
+    - Only NS/future fixtures             → earliest kickoff time
+    """
+    from src.services.fixture_service import get_fixture_by_api_id
+    from src.services.auto_result_service import COMPLETED_STATUSES
+
+    seen = {}
+    for pick in picks:
+        api_id = pick["api_fixture_id"]
+        if api_id not in seen:
+            seen[api_id] = pick
+
+    has_live = False
+    all_past_match_window = True
+    earliest_future_ko = None
+
+    for api_id, pick in seen.items():
+        sport = pick.get("sport")
+        fixture = get_fixture_by_api_id(api_id, sport=sport)
+        if not fixture:
+            continue
+
+        status = fixture.get("status", "NS")
+
+        if status in ("NS", "TBD"):
+            kickoff_str = fixture.get("kickoff")
+            if kickoff_str:
+                try:
+                    ko = datetime.fromisoformat(kickoff_str)
+                    if ko.tzinfo is None:
+                        ko = tz.localize(ko)
+                    if ko > now and (earliest_future_ko is None or ko < earliest_future_ko):
+                        earliest_future_ko = ko
+                except (ValueError, TypeError):
+                    pass
+        elif status not in COMPLETED_STATUSES:
+            has_live = True
+            kickoff_str = fixture.get("kickoff")
+            if kickoff_str:
+                try:
+                    ko = datetime.fromisoformat(kickoff_str)
+                    if ko.tzinfo is None:
+                        ko = tz.localize(ko)
+                    match_end = ko + timedelta(hours=MATCH_WINDOW_HOURS)
+                    if now < match_end:
+                        all_past_match_window = False
+                except (ValueError, TypeError):
+                    all_past_match_window = False
+
+    if has_live:
+        interval = POLL_INTERVAL_EXTRA if all_past_match_window else POLL_INTERVAL_LIVE
+        return now + timedelta(minutes=interval)
+
+    if earliest_future_ko and earliest_future_ko > now:
+        return earliest_future_ko
+
+    return now + timedelta(minutes=POLL_INTERVAL_LIVE)
 
 
 def _main_group_id():

@@ -602,6 +602,68 @@ def match_ended(home_team, away_team, home_score, away_score):
     return f"FT: {home_team} {home_score}-{away_score} {away_team}"
 
 
+def _format_event_brief(ev):
+    """Format an event dict as a brief line (no team names) for use inside bundles."""
+    event_type = ev["event_type"]
+    home_score = ev.get("home_score", "?")
+    away_score = ev.get("away_score", "?")
+    score = f"{home_score}-{away_score}"
+
+    if event_type == "FT":
+        return f"FT: {score}"
+    elif event_type == "HT":
+        return f"HT: {score}"
+    elif event_type == "Score":
+        return score
+    elif event_type == "Goal":
+        suffix = ""
+        detail = ev.get("detail")
+        if detail and detail != "Normal Goal":
+            suffix = f" ({detail})"
+        return f"\u26bd {score} \u2014 {ev['player']} {ev['minute']}'{suffix}"
+    elif event_type == "RedCard":
+        return f"\U0001f7e5 {score} \u2014 {ev['player']} {ev['minute']}' (Red Card)"
+    return ""
+
+
+def match_event_bundle(fixture_events_map):
+    """
+    Format bundled match events from one or more fixtures into a single message.
+
+    fixture_events_map: dict {(home, away): [event_dict, ...]}
+    Each event_dict: {event_type, home_score, away_score, player, minute, detail}
+
+    Single fixture + single event → full format with team names, no header.
+    Multiple events or multiple fixtures → fixture headers + brief event lines.
+    """
+    total_events = sum(len(v) for v in fixture_events_map.values())
+
+    if len(fixture_events_map) == 1 and total_events == 1:
+        (home, away), events = list(fixture_events_map.items())[0]
+        ev = events[0]
+        if ev["event_type"] == "FT":
+            return match_ended(home, away, ev["home_score"], ev["away_score"])
+        if ev["event_type"] == "HT":
+            return f"{home} {ev['home_score']}-{ev['away_score']} {away} (HT)"
+        if ev["event_type"] == "Score":
+            return f"{home} {ev['home_score']}-{ev['away_score']} {away}"
+        return match_event(
+            ev["event_type"], home, away,
+            ev["home_score"], ev["away_score"],
+            ev["player"], ev["minute"],
+            detail=ev.get("detail"),
+        )
+
+    sections = []
+    for (home, away), events in fixture_events_map.items():
+        lines = [_format_event_brief(ev) for ev in events]
+        lines = [l for l in lines if l]
+        if lines:
+            sections.append(f"{home} vs {away}\n" + "\n".join(lines))
+
+    return "\n\n".join(sections)
+
+
 def help_text():
     """Format the help message."""
     return (

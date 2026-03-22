@@ -2,7 +2,7 @@ import os
 
 from src.parsers.message_parser import (
     parse_message, extract_test_prefix, parse_cumulative_picks, detect_sport,
-    gaa_needs_clarification,
+    gaa_needs_clarification, _parse_pick,
 )
 
 
@@ -514,3 +514,34 @@ class TestSportDetection:
         result = parse_message("Chiefs -3.5 evens", "DA")
         assert result["type"] == "pick"
         assert result["parsed_data"]["sport"] == "nfl"
+
+
+class TestFalsePositivePrevention:
+    """Regression tests for real false positives from 2026-03-22 (Newcastle vs Sunderland match chat)."""
+
+    def test_question_with_fractional_odds_not_a_pick(self):
+        """'Was that only 5/6?' — question mark guard must fire BEFORE odds extraction."""
+        result = parse_message("Was that only 5/6?", "Kev")
+        assert result["type"] == "general"
+
+    def test_currency_amount_not_a_pick(self):
+        """'€90.22 payout on that one' — currency lookbehind prevents decimal match."""
+        result = parse_message("€90.22 payout on that one", "Nug")
+        assert result["type"] == "general"
+
+    def test_score_notation_not_a_pick(self):
+        """'Newcastle 2-1 up' — digit lookbehind prevents score dash matching as handicap."""
+        result = parse_message("Newcastle 2-1 up", "Kev")
+        assert result["type"] == "general"
+
+    def test_url_not_a_pick(self):
+        """bet365 share link — URL guard fires before any pattern matching."""
+        result = parse_message("https://www.bet365.com/s/r/GKCPL", "Don")
+        assert result["type"] == "general"
+
+    def test_over_cards_detected_as_bet_type(self):
+        """'Newcastle vs Sunderland Over Cards @ 5/6' — bet_type must be over_cards, not win."""
+        result = parse_message("Newcastle vs Sunderland Over Cards @ 5/6", "Ed")
+        assert result["type"] == "pick"
+        assert result["parsed_data"]["bet_type"] == "over_cards"
+        assert result["parsed_data"]["odds_original"] == "5/6"

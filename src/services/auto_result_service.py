@@ -275,6 +275,8 @@ def _evaluate_pick(pick, fixture):
         return _evaluate_ht_ft(pick, fixture, sport)
     elif bet_type == "handicap":
         return _evaluate_handicap(pick, home_team, away_team, home_score, away_score, sport)
+    elif bet_type == "over_cards":
+        return None  # No card data from API — leave for manual resulting
     else:
         # Default to win evaluation for unknown bet types
         return _evaluate_win(pick, home_team, away_team, home_score, away_score, sport)

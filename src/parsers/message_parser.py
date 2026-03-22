@@ -14,7 +14,7 @@ TEST_PREFIX = re.compile(
 
 # Odds patterns
 FRACTIONAL_ODDS = re.compile(r"\b(\d+/\d+)\b")
-DECIMAL_ODDS = re.compile(r"\b(\d+\.\d{1,2})\b")
+DECIMAL_ODDS = re.compile(r"(?<![€£$])\b(\d+\.\d{1,2})\b")
 EVENS = re.compile(r"\bevens\b", re.IGNORECASE)
 
 # Result emojis
@@ -24,6 +24,7 @@ LOSS_EMOJI = "\u274c"  # red cross
 # Bet type keywords
 BET_TYPE_PATTERNS = {
     "btts": re.compile(r"\bbtts\b", re.IGNORECASE),
+    "over_cards": re.compile(r"\b(over|under)\s+cards?\b", re.IGNORECASE),
     "over_under": re.compile(r"\b(over|under)\s+\d+\.?\d*\b", re.IGNORECASE),
     "handicap": re.compile(r"(?<!\d)[+-]\s*\d+\.?\d*\b"),
     "ht_ft": re.compile(r"\bht[/_]?ft\b", re.IGNORECASE),
@@ -237,6 +238,9 @@ def _looks_like_pick(text):
     # Long messages are almost certainly chat, not picks
     if len(text.split()) > 15:
         return False
+    # URLs are never picks
+    if re.search(r"https?://", text):
+        return False
     # Questions are chat, not picks
     if "?" in text or _QUESTION_START.match(text):
         return False
@@ -253,7 +257,7 @@ def _looks_like_pick(text):
         return True
     if re.search(r"\w+/\w+", text) and len(text.split()) <= 8:
         return True
-    if re.search(r"[+-]\s*\d+\.?\d*", text):  # Handicap-style
+    if re.search(r"(?<!\d)[+-]\s*\d+\.?\d*", text):  # Handicap-style (no digit before sign)
         return True
     return False
 
@@ -359,6 +363,11 @@ def _parse_pick(text, sender, sender_phone=""):
     """Detect pick submissions containing odds."""
     # Long messages are chat, not picks — even if they contain number patterns
     if len(text.split()) > 15:
+        return None
+
+    # Questions and URLs are never picks — check BEFORE odds extraction so that
+    # e.g. "Was that only 5/6?" or a bet365 share link isn't parsed as a pick
+    if "?" in text or re.search(r"https?://", text):
         return None
 
     odds_original = None

@@ -438,7 +438,7 @@ def _cmd_resetweek(parsed):
     conn.execute("DELETE FROM penalties WHERE week_id = ?", (week["id"],))
     # Reset week status and placer
     conn.execute(
-        "UPDATE weeks SET status = 'open', placer_id = NULL WHERE id = ?",
+        "UPDATE weeks SET status = 'open', placer_id = NULL, placer_is_penalty = 0 WHERE id = ?",
         (week["id"],),
     )
     conn.commit()
@@ -584,6 +584,13 @@ def handle_cumulative_picks(cumulative):
     When a player appears multiple times, only the LAST occurrence is used (so a
     replacement pick at the end of the thread wins over an earlier line).
     """
+    # Check placer lock BEFORE window check — once bet is placed, silently ignore
+    # (prevents spurious 'window closed' replies when chatting after bet is placed)
+    current_week = get_current_week(group_id=_get_group_id())
+    if current_week and current_week.get("placer_id"):
+        logger.info("Cumulative picks ignored — bet already placed for week %s", current_week["id"])
+        return None
+
     if not Config.TEST_MODE and not is_within_submission_window(_get_group_id()):
         logger.info("Cumulative picks ignored — outside submission window")
         return "The submission window is currently closed — picks are accepted from Wednesday 7pm to Friday 10pm."
@@ -664,6 +671,13 @@ def handle_cumulative_picks(cumulative):
 
 def handle_pick(parsed):
     """Process a pick submission."""
+    # Check placer lock BEFORE window check — once bet is placed, silently ignore
+    # (prevents spurious 'window closed' replies when chatting after bet is placed)
+    current_week = get_current_week(group_id=_get_group_id())
+    if current_week and current_week.get("placer_id"):
+        logger.info("Pick ignored — bet already placed for week %s", current_week["id"])
+        return None
+
     # Only accept picks during the submission window (bypass in test mode)
     if not Config.TEST_MODE and not is_within_submission_window(_get_group_id()):
         logger.info("Pick ignored — outside submission window")

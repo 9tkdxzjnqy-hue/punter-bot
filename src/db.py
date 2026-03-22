@@ -40,6 +40,7 @@ def _run_migrations(conn):
     _migrate_fixture_events(conn)
     _migrate_team_aliases_sport(conn)
     _migrate_players_aliases(conn)
+    _migrate_bet_slips_cashout(conn)
 
 
 def _column_exists(conn, table, column):
@@ -150,6 +151,20 @@ def _migrate_players_aliases(conn):
     if _column_exists(conn, "players", "aliases"):
         return
     conn.execute("ALTER TABLE players ADD COLUMN aliases TEXT DEFAULT ''")
+    conn.commit()
+
+
+def _migrate_bet_slips_cashout(conn):
+    """Add cashout tracking columns to bet_slips table."""
+    for col_sql in [
+        "ALTER TABLE bet_slips ADD COLUMN cashed_out INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE bet_slips ADD COLUMN reloaded INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE bet_slips ADD COLUMN actual_return REAL",
+    ]:
+        try:
+            conn.execute(col_sql)
+        except Exception:
+            pass
     conn.commit()
 
 

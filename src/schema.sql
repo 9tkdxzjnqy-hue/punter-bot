@@ -113,6 +113,9 @@ CREATE TABLE IF NOT EXISTS bet_slips (
     stake REAL,
     potential_return REAL,
     image_path TEXT,
+    cashed_out INTEGER NOT NULL DEFAULT 0,
+    reloaded INTEGER NOT NULL DEFAULT 0,
+    actual_return REAL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

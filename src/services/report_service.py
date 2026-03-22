@@ -50,7 +50,8 @@ def get_period_data(season, end_week, group_id="default"):
 
     bet_slips = conn.execute(
         """
-        SELECT bs.stake, bs.potential_return, w.week_number
+        SELECT bs.stake, bs.potential_return, bs.cashed_out, bs.reloaded, bs.actual_return,
+               w.week_number
         FROM bet_slips bs
         JOIN weeks w ON bs.week_id = w.id
         WHERE w.season = ? AND w.week_number BETWEEN ? AND ?
@@ -219,22 +220,27 @@ def compute_acca_record(bet_slips, player_rows):
 
 def compute_group_pnl(bet_slips, player_rows):
     """
-    Returns {staked, returned, net}.
+    Returns {staked, returned, net, cashout_cost}.
 
-    returned = potential_return for weeks with no losses (full acca win), else 0.
+    For cashed-out weeks: returned += actual_return; cashout_cost += potential_return - actual_return.
+    For normal win weeks: returned += potential_return.
+    Loss weeks (non-cashout) contribute nothing to returned.
     """
     if not bet_slips:
-        return {"staked": 0.0, "returned": 0.0, "net": 0.0}
+        return {"staked": 0.0, "returned": 0.0, "net": 0.0, "cashout_cost": 0.0}
 
     loss_weeks = {row["week_number"] for row in player_rows if row["outcome"] == "loss"}
-
+    cashout_cost = 0.0
     staked = sum(float(bs["stake"] or 0) for bs in bet_slips)
-    returned = sum(
-        float(bs["potential_return"] or 0)
-        for bs in bet_slips
-        if bs["week_number"] not in loss_weeks
-    )
-    return {"staked": staked, "returned": returned, "net": returned - staked}
+    returned = 0.0
+    for bs in bet_slips:
+        if bs.get("cashed_out"):
+            actual = float(bs["actual_return"] or 0)
+            returned += actual
+            cashout_cost += float(bs["potential_return"] or 0) - actual
+        elif bs["week_number"] not in loss_weeks:
+            returned += float(bs["potential_return"] or 0)
+    return {"staked": staked, "returned": returned, "net": returned - staked, "cashout_cost": cashout_cost}
 
 
 def compute_singles_pnl(player_rows, bet_slips, default_stake=20.0):

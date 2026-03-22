@@ -36,9 +36,16 @@ def _make_rows(*tuples):
 
 
 def _make_slips(*tuples):
-    """Build bet_slips from (week_number, stake, potential_return)."""
+    """Build bet_slips from (week_number, stake, potential_return[, cashed_out[, reloaded[, actual_return]]])."""
     return [
-        {"week_number": t[0], "stake": t[1], "potential_return": t[2]}
+        {
+            "week_number": t[0],
+            "stake": t[1],
+            "potential_return": t[2],
+            "cashed_out": t[3] if len(t) > 3 else 0,
+            "reloaded": t[4] if len(t) > 4 else 0,
+            "actual_return": t[5] if len(t) > 5 else None,
+        }
         for t in tuples
     ]
 
@@ -166,6 +173,42 @@ class TestComputeGroupPnl:
         pnl = compute_group_pnl([], [])
         assert pnl["staked"] == 0
         assert pnl["net"] == 0
+
+    def test_cashout_uses_actual_return(self):
+        # Cashed out at 99; potential was 500 → cashout_cost = 401
+        rows = _make_rows((1, "K", 1, "win", 2.0))
+        slips = _make_slips((1, 10, 500, 1, 0, 99))
+        pnl = compute_group_pnl(slips, rows)
+        assert pnl["staked"] == pytest.approx(10)
+        assert pnl["returned"] == pytest.approx(99)
+        assert pnl["net"] == pytest.approx(89)
+        assert pnl["cashout_cost"] == pytest.approx(401)
+
+    def test_cashout_with_reload(self):
+        # Cashed out + reload, actual_return=158; potential was 1231
+        rows = _make_rows((1, "K", 1, "win", 2.0))
+        slips = _make_slips((1, 10, 1231, 1, 1, 158))
+        pnl = compute_group_pnl(slips, rows)
+        assert pnl["returned"] == pytest.approx(158)
+        assert pnl["cashout_cost"] == pytest.approx(1073)
+
+    def test_no_cashout_has_zero_cashout_cost(self):
+        rows = _make_rows((1, "K", 1, "win", 2.0))
+        slips = _make_slips((1, 10, 40))
+        pnl = compute_group_pnl(slips, rows)
+        assert pnl["cashout_cost"] == pytest.approx(0)
+
+    def test_mixed_cashout_and_normal_weeks(self):
+        # Week 1: normal win (potential=40); week 2: cashed out (actual=99, potential=500)
+        rows = _make_rows(
+            (1, "K", 1, "win", 2.0),
+            (1, "K", 2, "win", 5.0),
+        )
+        slips = _make_slips((1, 10, 40), (2, 10, 500, 1, 0, 99))
+        pnl = compute_group_pnl(slips, rows)
+        assert pnl["staked"] == pytest.approx(20)
+        assert pnl["returned"] == pytest.approx(139)   # 40 + 99
+        assert pnl["cashout_cost"] == pytest.approx(401)
 
 
 # ---------------------------------------------------------------------------
@@ -467,3 +510,18 @@ class TestPunterReportDisplay:
     def test_awards_section(self):
         text = butler.punter_report_display(self._minimal_data())
         assert "Awards" in text
+
+    def test_cashout_cost_shown_when_present(self):
+        data = self._minimal_data()
+        # Week 1: cashed out at 99, potential was 300
+        data["bet_slips"] = _make_slips((1, 10, 300, 1, 0, 99), (2, 10, 0))
+        text = butler.punter_report_display(data)
+        assert "Cashout cost" in text
+        assert "201" in text  # 300 - 99 = 201
+
+    def test_cashout_cost_hidden_when_zero(self):
+        data = self._minimal_data()
+        # Normal slips, no cashout
+        data["bet_slips"] = _make_slips((1, 10, 30), (2, 10, 0))
+        text = butler.punter_report_display(data)
+        assert "Cashout cost" not in text

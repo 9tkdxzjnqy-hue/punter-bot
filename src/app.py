@@ -191,6 +191,9 @@ def handle_command(parsed):
     if command == "removepick":
         return _cmd_removepick(parsed)
 
+    if command == "cashout":
+        return _cmd_cashout(parsed, args)
+
     if command == "ping":
         return "pong"
 
@@ -276,6 +279,88 @@ def _cmd_removepick(parsed):
         return "You have no pick recorded this week."
 
     return butler.pick_removed(player)
+
+
+def _cmd_cashout(parsed, args):
+    """!cashout [week] <amount> [reload] — Admin only. Record a cashout on a week's bet slip."""
+    if not _is_authorized_admin(parsed):
+        return "Only an admin may record a cashout."
+
+    if not args:
+        return "Usage: !cashout [week] <amount> [reload]"
+
+    remaining = list(args)
+
+    # Optional trailing "reload" keyword
+    reloaded = 0
+    if remaining and remaining[-1].lower() == "reload":
+        reloaded = 1
+        remaining.pop()
+
+    # Optional leading week number (only if at least 2 tokens remain)
+    week_number = None
+    if len(remaining) >= 2:
+        try:
+            week_number = int(remaining[0])
+            remaining.pop(0)
+        except ValueError:
+            pass
+
+    if not remaining:
+        return "Usage: !cashout [week] <amount> [reload]"
+    try:
+        actual_return = float(remaining[0])
+    except ValueError:
+        return f"Invalid amount: {remaining[0]}"
+
+    group_id = _get_group_id()
+    conn = get_db()
+
+    if week_number is not None:
+        row = conn.execute(
+            "SELECT id, week_number, placer_id FROM weeks WHERE week_number = ? AND group_id = ?",
+            (week_number, group_id),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            "SELECT id, week_number, placer_id FROM weeks WHERE group_id = ? "
+            "AND status = 'completed' ORDER BY week_number DESC LIMIT 1",
+            (group_id,),
+        ).fetchone()
+
+    if not row:
+        conn.close()
+        target = f"week {week_number}" if week_number is not None else "any completed week"
+        return f"No week found ({target})."
+
+    week_id = row["id"]
+    found_week_num = row["week_number"]
+    placer_id = row["placer_id"]
+
+    existing = conn.execute(
+        "SELECT id FROM bet_slips WHERE week_id = ?", (week_id,)
+    ).fetchone()
+
+    if existing:
+        conn.execute(
+            "UPDATE bet_slips SET cashed_out=1, reloaded=?, actual_return=? WHERE week_id=?",
+            (reloaded, actual_return, week_id),
+        )
+    else:
+        if not placer_id:
+            conn.close()
+            return f"Week {found_week_num} has no bet slip and no placer recorded — cannot create one."
+        conn.execute(
+            "INSERT INTO bet_slips (week_id, placer_id, cashed_out, reloaded, actual_return) "
+            "VALUES (?, ?, 1, ?, ?)",
+            (week_id, placer_id, reloaded, actual_return),
+        )
+
+    conn.commit()
+    conn.close()
+
+    reload_suffix = " (with reload)" if reloaded else ""
+    return f"Cashout recorded for week {found_week_num} — actual return: \u20ac{actual_return:.2f}{reload_suffix}."
 
 
 def _cmd_confirm(parsed, args):

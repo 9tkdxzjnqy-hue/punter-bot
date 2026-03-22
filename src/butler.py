@@ -678,6 +678,11 @@ def punter_report_display(period_data):
             f"\U0001f4b0 *Group P&L:* staked \u20ac{pnl['staked']:.0f} \u00b7 "
             f"returned \u20ac{pnl['returned']:.0f} \u00b7 net {net_sign}\u20ac{pnl['net']:.0f}"
         )
+        if pnl.get("cashout_cost", 0) > 0:
+            lines.append(
+                f"\u26a0\ufe0f  Cashout cost: \u2212\u20ac{pnl['cashout_cost']:.0f}"
+                f" (left on the table vs full acca)"
+            )
         lines.append("")
 
     # --- Singles P&L ---

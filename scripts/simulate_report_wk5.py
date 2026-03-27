@@ -14,7 +14,7 @@ import sqlite3
 import requests
 
 DB_PATH = "data/punter_bot.db"
-GROUP_ID = "447762550958-1423072447@g.us"
+GROUP_ID = os.getenv("GROUP_CHAT_ID", "your-group-id@g.us")
 SEASON = "2026"
 END_WEEK = 5
 

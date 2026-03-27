@@ -68,9 +68,9 @@ Then run `./scripts/start.sh` or start both services manually. The bridge will a
 
 The bot runs on an Oracle Cloud Always Free Ubuntu 22.04 VM, managed by PM2.
 
-**Server:** `ssh -i ~/Documents/Oracle/ssh-key-2026-02-18.key ubuntu@193.123.179.96`
+**Server:** `ssh -i ~/path/to/key.key ubuntu@<your-server-ip>`
 
-**SSH tunnel** (to access bridge locally): `ssh -L 3000:localhost:3000 -i ~/Documents/Oracle/ssh-key-2026-02-18.key ubuntu@193.123.179.96`
+**SSH tunnel** (to access bridge locally): `ssh -L 3000:localhost:3000 -i ~/path/to/key.key ubuntu@<your-server-ip>`
 
 **PM2 commands (on server):**
 ```bash

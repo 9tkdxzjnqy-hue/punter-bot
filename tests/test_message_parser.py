@@ -545,3 +545,24 @@ class TestFalsePositivePrevention:
         assert result["type"] == "pick"
         assert result["parsed_data"]["bet_type"] == "over_cards"
         assert result["parsed_data"]["odds_original"] == "5/6"
+
+    def test_bare_fractional_odds_not_a_pick(self):
+        """'13/8' alone — discussing odds in chat, no selection. Real false positive 2026-03-26."""
+        result = parse_message("13/8", "DA")
+        assert result["type"] == "general"
+
+    def test_bare_decimal_odds_not_a_pick(self):
+        """'2.5' alone in chat should not be recorded as a pick."""
+        result = parse_message("2.5", "Kev")
+        assert result["type"] == "general"
+
+    def test_bare_evens_not_a_pick(self):
+        """'evens' alone in chat should not be recorded as a pick."""
+        result = parse_message("evens", "Kev")
+        assert result["type"] == "general"
+
+    def test_odds_with_selection_still_a_pick(self):
+        """'Ireland to qualify 13/8' — has a selection, must still parse as a pick."""
+        result = parse_message("Ireland to qualify 13/8", "DA")
+        assert result["type"] == "pick"
+        assert result["parsed_data"]["odds_original"] == "13/8"

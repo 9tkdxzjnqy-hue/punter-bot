@@ -392,6 +392,18 @@ def _parse_pick(text, sender, sender_phone=""):
             odds_original = match.group(1)
             odds_decimal = float(odds_original)
 
+    # Require non-odds content — a bare odds string ("13/8", "2.5", "evens") is chat, not a pick.
+    # Strip the odds token from the text and check something meaningful remains.
+    if odds_original and odds_original != "placer":
+        if odds_original == "evens":
+            remainder = EVENS.sub("", text).strip()
+        elif "/" in odds_original:
+            remainder = FRACTIONAL_ODDS.sub("", text).strip()
+        else:
+            remainder = DECIMAL_ODDS.sub("", text).strip()
+        if not remainder:
+            return None
+
     # No odds: allow if text looks like a pick (player trusts placer, odds >= 1.5)
     if not odds_original:
         if not _looks_like_pick(text):

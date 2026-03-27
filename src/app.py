@@ -786,6 +786,16 @@ def handle_pick(parsed):
         logger.info("Pick ignored — unknown player: %s", parsed["sender"])
         return None
 
+    # Require the player's emoji in the message — prevents casual chat with odds
+    # (e.g. "13/8") from being recorded as a pick. Cumulative picks bypass this
+    # (they require the emoji prefix by definition). Skipped in test mode.
+    if not Config.TEST_MODE:
+        player_emojis = [e.strip() for e in (player.get("emoji") or "").split(",") if e.strip()]
+        raw = parsed.get("raw_text", "")
+        if player_emojis and not any(e in raw for e in player_emojis):
+            logger.info("Pick ignored — %s's emoji not present in message", player["name"])
+            return None
+
     # Get or create the current week
     week = get_or_create_current_week(group_id=_get_group_id())
 

@@ -115,15 +115,7 @@ def pick_confirmed(player, description, odds, is_update=False, placer=None, prev
     if sport_clarification:
         template += f"\n(Recorded as {sport_clarification} — reply with your emoji prefix + 'hurling' or 'football' to correct.)"
 
-    # When this is the last pick, skip LLM framing — the all_picks_in block provides context
-    if last_pick:
-        return template
-
-    scenario = "pick_confirmed_first" if first_of_week and not is_update else "pick_confirmed"
-    context = f"{player['formal_name']}'s pick recorded: {_strip_odds_for_display(formal)} @ {odds}."
-    if picks_so_far is not None and picks_so_far > 1:
-        context += f" Pick {picks_so_far} this week — not the first pick."
-    return _frame(template, context, scenario=scenario, player_name=_first_name(player))
+    return template
 
 
 def picks_status(submitted, missing):
@@ -262,13 +254,7 @@ def result_announced(player, description, odds, outcome, streak=None, acca_lost=
 
     template = f"{player['formal_name']} {emoji} \u2014 {display_text} @ {odds}"
 
-    streak_ctx = f" ({streak} streak)" if streak else ""
-    if acca_lost and losers:
-        acca_ctx = f" The accumulator fell on {_join_names(losers)}'s selections."
-    else:
-        acca_ctx = ""
-    context = f"{player['formal_name']}'s pick {outcome}: {display_text} @ {odds}.{streak_ctx}{acca_ctx}"
-    return _frame(template, context, scenario=scenario, player_name=_first_name(player))
+    return template
 
 
 def penalty_suggested(player, streak_count, penalty_type, amount):

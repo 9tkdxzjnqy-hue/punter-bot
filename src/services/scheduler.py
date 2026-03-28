@@ -277,11 +277,29 @@ def _job_monitor_week(week_id):
 
         acca_alive = not week_has_loss(week_id)
 
-        # Refresh all live (non-NS) fixtures before processing
+        # Refresh fixtures that are already live/completed OR whose kickoff has
+        # passed but whose cached status is still NS. Without the latter check,
+        # matches never transition from NS to live in the cache (bootstrap problem:
+        # refresh was gated on the status it was supposed to update).
+        utc = pytz.utc
+        now_utc = datetime.now(utc)
         for api_id, pick in seen.items():
             sport = pick.get("sport")
             fixture = get_fixture_by_api_id(api_id, sport=sport)
-            if fixture and fixture.get("status", "NS") not in ("NS", "TBD"):
+            if not fixture:
+                continue
+            cached_status = fixture.get("status", "NS")
+            kickoff_passed = False
+            kickoff_str = pick.get("kickoff") or fixture.get("kickoff")
+            if kickoff_str:
+                try:
+                    ko = datetime.fromisoformat(kickoff_str.replace("Z", "+00:00"))
+                    if ko.tzinfo is None:
+                        ko = utc.localize(ko)
+                    kickoff_passed = now_utc >= ko
+                except (ValueError, TypeError):
+                    pass
+            if cached_status not in ("NS", "TBD") or kickoff_passed:
                 refresh_fixture(api_id, sport=sport)
 
         # Collect events, detect HT, and track currently live fixtures

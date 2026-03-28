@@ -664,9 +664,9 @@ def match_event_bundle(fixture_events_map):
     return "\n\n".join(sections)
 
 
-def help_text():
+def help_text(is_admin=False):
     """Format the help message."""
-    return (
+    player_section = (
         "At your service. Available commands:\n"
         "!stats — Your personal statistics\n"
         "!stats [player] — Stats for a specific player\n"
@@ -674,13 +674,19 @@ def help_text():
         "!leaderboard — Win rate rankings\n"
         "!rotation — Current rotation and queue\n"
         "!vault — Vault total\n"
-        "!help — This message\n"
-        "!myphone — Your WhatsApp ID (for .env setup)\n"
+        "!removepick — Remove your pick for this week\n"
+        "!help — This message"
+    )
+    if not is_admin:
+        return player_section
+    return (
+        player_section + "\n"
         "\n"
         "Admin:\n"
         "!confirm penalty [player] — Confirm a pending penalty\n"
         "!override [player] [win/loss] — Change a result\n"
         "!report [week] — Post the 5-week Punter Report\n"
+        "!cashout [week] <amount> [reload] — Record a cashout\n"
         "!resetweek — Reset the current week\n"
         "!resetseason — Clear all data for fresh start (next week = Week 1)"
     )

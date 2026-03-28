@@ -159,7 +159,7 @@ def handle_command(parsed):
     args = parsed["parsed_data"].get("args", [])
 
     if command == "help":
-        return butler.help_text()
+        return butler.help_text(is_admin=_is_authorized_admin(parsed))
 
     if command == "stats":
         return _cmd_stats(parsed, args)

@@ -438,8 +438,16 @@ def _next_week_poll_time(picks, now, tz):
                     ko = datetime.fromisoformat(kickoff_str)
                     if ko.tzinfo is None:
                         ko = tz.localize(ko)
-                    if ko > now and (earliest_future_ko is None or ko < earliest_future_ko):
-                        earliest_future_ko = ko
+                    if ko > now:
+                        if earliest_future_ko is None or ko < earliest_future_ko:
+                            earliest_future_ko = ko
+                    else:
+                        # Kickoff has passed but API still reports NS — treat as live
+                        # so we keep polling rather than waiting for the next fixture
+                        has_live = True
+                        match_end = ko + timedelta(hours=MATCH_WINDOW_HOURS)
+                        if now < match_end:
+                            all_past_match_window = False
                 except (ValueError, TypeError):
                     pass
         elif status not in COMPLETED_STATUSES:

@@ -92,8 +92,9 @@ def auto_result_week(week_id):
         streak = get_consecutive_losses(pick["player_id"])
         streak_str = f"{streak}L" if streak > 0 and outcome == "loss" else None
 
+        display_odds = butler._decimal_to_fractional(pick["confirmed_odds"]) if pick.get("confirmed_odds") else pick["odds_original"]
         announcement = butler.result_announced(
-            player, pick["description"], pick["odds_original"], outcome,
+            player, pick["description"], display_odds, outcome,
             streak=streak_str,
         )
 
@@ -193,8 +194,9 @@ def auto_result_fixture(api_fixture_id, week_id):
     streak = get_consecutive_losses(pick["player_id"])
     streak_str = f"{streak}L" if streak > 0 and outcome == "loss" else None
 
+    display_odds = butler._decimal_to_fractional(pick["confirmed_odds"]) if pick.get("confirmed_odds") else pick["odds_original"]
     announcement = butler.result_announced(
-        player, pick["description"], pick["odds_original"], outcome,
+        player, pick["description"], display_odds, outcome,
         streak=streak_str,
     )
 

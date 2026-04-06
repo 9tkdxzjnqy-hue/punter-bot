@@ -151,6 +151,19 @@ def _match_by_alias(team_names, fixtures, sport="football"):
     """
     resolved = [_resolve_alias(name, sport=sport) for name in team_names]
 
+    # If a name didn't resolve via alias, try each word individually.
+    # Handles space-separated shorthand like "Atletico Barca" where there's
+    # no vs/v/@ separator — each word may be its own alias.
+    extra = []
+    for name, res in zip(team_names, resolved):
+        if res == name:  # alias didn't fire for the full name
+            for word in name.split():
+                if len(word) >= 3:
+                    word_res = _resolve_alias(word, sport=sport)
+                    if word_res != word:
+                        extra.append(word_res)
+    resolved = resolved + extra
+
     for fixture in fixtures:
         home = fixture["home_team"].lower()
         away = fixture["away_team"].lower()

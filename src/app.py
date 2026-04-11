@@ -765,6 +765,26 @@ def handle_cumulative_picks(cumulative):
 
 def handle_pick(parsed):
     """Process a pick submission."""
+    # Look up the player first — unknown senders are silently ignored regardless
+    player = lookup_player(
+        sender_phone=parsed.get("sender_phone", ""),
+        sender_name=parsed["sender"],
+    )
+    if not player:
+        logger.info("Pick ignored — unknown player: %s", parsed["sender"])
+        return None
+
+    # Require the player's emoji in the message BEFORE any window/lock checks.
+    # This prevents casual chat containing numbers (e.g. "4/6 picks make the cut")
+    # from triggering a "window closed" reply. Cumulative picks bypass this
+    # (they require the emoji prefix by definition). Skipped in test mode.
+    if not Config.TEST_MODE:
+        player_emojis = [e.strip() for e in (player.get("emoji") or "").split(",") if e.strip()]
+        raw = parsed.get("raw_text", "")
+        if player_emojis and not any(e in raw for e in player_emojis):
+            logger.info("Pick ignored — %s's emoji not present in message", player["name"])
+            return None
+
     # Check placer lock BEFORE window check — once bet is placed, silently ignore
     # (prevents spurious 'window closed' replies when chatting after bet is placed)
     current_week = get_current_week(group_id=_get_group_id())
@@ -776,25 +796,6 @@ def handle_pick(parsed):
     if not Config.TEST_MODE and not is_within_submission_window(_get_group_id()):
         logger.info("Pick ignored — outside submission window")
         return "The submission window is currently closed — picks are accepted from Wednesday 7pm to Friday 10pm."
-
-    # Look up the player
-    player = lookup_player(
-        sender_phone=parsed.get("sender_phone", ""),
-        sender_name=parsed["sender"],
-    )
-    if not player:
-        logger.info("Pick ignored — unknown player: %s", parsed["sender"])
-        return None
-
-    # Require the player's emoji in the message — prevents casual chat with odds
-    # (e.g. "13/8") from being recorded as a pick. Cumulative picks bypass this
-    # (they require the emoji prefix by definition). Skipped in test mode.
-    if not Config.TEST_MODE:
-        player_emojis = [e.strip() for e in (player.get("emoji") or "").split(",") if e.strip()]
-        raw = parsed.get("raw_text", "")
-        if player_emojis and not any(e in raw for e in player_emojis):
-            logger.info("Pick ignored — %s's emoji not present in message", player["name"])
-            return None
 
     # Get or create the current week
     week = get_or_create_current_week(group_id=_get_group_id())

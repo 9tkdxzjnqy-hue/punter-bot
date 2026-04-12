@@ -476,6 +476,11 @@ def parse_cumulative_picks(text, emoji_to_player):
         player = emoji_to_player[matched_emoji]
         pick_text = line[len(matched_emoji) :].strip()
 
+        # Skip lines where the remaining text is purely result emojis (e.g. "♟️❌" is a
+        # result entry, not a pick — let it fall through to single-message result parsing)
+        if pick_text and all(c in (WIN_EMOJI + LOSS_EMOJI) for c in pick_text):
+            continue
+
         pick = _parse_pick(pick_text, player["nickname"], "")
         if pick and pick["type"] == "pick":
             results.append((player, pick["parsed_data"]))

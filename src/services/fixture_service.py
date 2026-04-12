@@ -345,14 +345,25 @@ def get_fixture_by_api_id(api_id, sport=None):
 
 def refresh_fixture(api_id, sport=None):
     """
-    Re-fetch a single fixture from API-Football and update the cache.
-    Used to check for score updates during auto-resulting.
+    Re-fetch a single fixture and update the cache.
+    Routes to the sport-specific API — non-football sports use api_sports.py
+    to avoid cross-sport ID collisions (both APIs share the same numeric ID space).
     """
-    fixture_data = get_fixture_by_id(api_id, cache_ttl_hours=0)
-    if fixture_data:
-        _cache_fixtures([fixture_data])
+    if sport and sport != "football":
+        from src.api.api_sports import get_fixture, normalize_fixture
+        raw = get_fixture(sport, api_id)
+        if not raw:
+            return None
+        normalized = normalize_fixture(sport, raw)
+        if normalized:
+            cache_normalized_fixtures([normalized])
         return get_fixture_by_api_id(api_id, sport=sport)
-    return None
+    else:
+        fixture_data = get_fixture_by_id(api_id, cache_ttl_hours=0)
+        if fixture_data:
+            _cache_fixtures([fixture_data])
+            return get_fixture_by_api_id(api_id, sport=sport)
+        return None
 
 
 def refresh_fixtures_by_date(date_str):

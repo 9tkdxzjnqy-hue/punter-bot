@@ -78,7 +78,7 @@ Reference for MVP testing. Update status as flows are confirmed.
 | # | Flow | Status | Notes |
 |---|------|--------|-------|
 | 30 | **Thursday 7PM reminder** — Bot posts reminder to group | ⏳ | |
-| 31 | **Friday 5PM reminder** — Bot tags missing players | ⏳ | |
+| 31 | **Friday 7PM reminder** — Bot tags missing players | ⏳ | |
 | 32 | **Friday 9:30PM reminder** — Bot sends final reminder (group only; DMs not implemented) | ⏳ | |
 | 33 | **Friday 10PM close** — Bot closes the week | ⏳ | |
 | 34 | **Week complete summary** — When last result posted, bot sends results + leaderboard + next placer | ✅ | Combined with flow 15 |

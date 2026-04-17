@@ -64,12 +64,12 @@ def init_scheduler(send_message_fn):
         id="reminder_thursday",
     )
 
-    # Friday 5PM — reminder to missing players
+    # Friday 7PM — reminder to missing players
     _scheduler.add_job(
         _job_reminder_friday,
         "cron",
         day_of_week="fri",
-        hour=17,
+        hour=19,
         minute=0,
         id="reminder_friday",
     )
@@ -504,7 +504,7 @@ def _job_reminder_thursday():
 
 
 def _job_reminder_friday():
-    """Friday 5PM: Remind players who haven't submitted."""
+    """Friday 7PM: Remind players who haven't submitted."""
     try:
         week = get_current_week(group_id=_main_group_id())
         if not week:

@@ -272,6 +272,24 @@ client.on("message_create", async (message) => {
       }
     }
 
+    // When this message is a reply, pass the quoted message ID to Flask.
+    // If the quoted message contains media, cache it now so Flask can
+    // pull it via /media even if the original message has been evicted.
+    if (message.hasQuotedMsg) {
+      try {
+        const quoted = await message.getQuotedMessage();
+        payload.quoted_message_id = quoted.id._serialized;
+        if (quoted.hasMedia) {
+          recentMessages.set(quoted.id._serialized, quoted);
+          if (recentMessages.size > 50) {
+            recentMessages.delete(recentMessages.keys().next().value);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to resolve quoted message:", err.message);
+      }
+    }
+
     const result = await postToFlask("/webhook", payload);
     if (result && result.action === "replied") {
       console.log(`Bot replied: ${result.reply.slice(0, 80)}`);

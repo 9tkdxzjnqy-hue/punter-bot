@@ -1136,7 +1136,10 @@ def test_webhook():
                         reply = handle_result(parsed)
 
         if not reply and has_media:
-            reply = _handle_placer_bet_confirmation(sender, sender_phone, body, message_id=message_id, from_image=True)
+            _next_placer = get_next_placer()
+            _sender_player = lookup_player(sender_phone=sender_phone, sender_name=sender)
+            if _next_placer and _sender_player and _sender_player["id"] == _next_placer["id"]:
+                reply = _handle_placer_bet_confirmation(sender, sender_phone, body, message_id=message_id, from_image=True)
 
         if not reply and body.strip():
             player = lookup_player(sender_phone=sender_phone, sender_name=sender)

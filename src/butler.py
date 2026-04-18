@@ -661,6 +661,7 @@ def help_text(is_admin=False):
         "!rotation — Current rotation and queue\n"
         "!vault — Vault total\n"
         "!removepick — Remove your pick for this week\n"
+        "!slip — Reply to a bet slip image to confirm placement (for delegated bets)\n"
         "!help — This message"
     )
     if not is_admin:

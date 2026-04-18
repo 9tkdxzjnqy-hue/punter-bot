@@ -55,13 +55,25 @@ src/llm_client.py           ← Groq API wrapper. Secondary infrastructure.
 
 ## Known fragile areas — read before touching
 
-**1. Bet slip image attribution (`app.py` → `_handle_placer_bet_confirmation`)**
-Fires for any image from any player when all picks are in and no placer is recorded.
-The LLM validates whether the image is a bet slip, but the confirmation response
-always credits `next_placer`, not the sender. Two failure modes: (a) LLM misclassifies
-a non-slip image as a slip, triggering the full flow incorrectly; (b) the credited
-player is not the person who sent the image. Do not change this function without
-understanding the full image → LLM → advance_rotation → butler.bet_slip_received flow.
+**1. Bet slip confirmation — three paths, different guards (`app.py`)**
+There are three ways the bot confirms a bet is placed. Do not conflate them:
+
+- **Image auto-detection** (`_handle_placer_bet_confirmation`, `from_image=True`):
+  Only fires when the sender IS the designated next placer (`sender["id"] == next_placer["id"]`).
+  LLM validates the image — all-null response is rejected before `advance_rotation`.
+  Credited player is always `next_placer`, not necessarily the sender.
+
+- **Text confirmation** (`_handle_placer_bet_confirmation`, `from_image=False`):
+  Fires for any known player who sends "placed"/"sorted"/etc. No LLM gate.
+  Credits `next_placer`, not the sender. Any player can confirm on behalf of placer.
+
+- **`!slip` command** (`_cmd_slip`): Explicit delegation. Any known player replies to
+  a bet slip image with `!slip`. Bypasses LLM validation — human confirmation gates
+  the flow. Still runs LLM best-effort for confirmed odds.
+
+Do not change any of these paths without reading all three and understanding
+how they interact. The placer-only restriction on the image path is intentional —
+see commit `f97785f`.
 
 **2. Player alias resolution (`player_service.py` + `message_parser.py`)**
 "Don", "DA", and "Declan" must all resolve to the same player.

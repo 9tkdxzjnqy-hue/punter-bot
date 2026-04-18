@@ -116,7 +116,10 @@ def webhook():
         else:
             # Check bet placement BEFORE pick parsing — bet365 share links contain
             # "bet slip" in the WhatsApp preview text and would otherwise be parsed
-            # as picks and rejected with "submission window closed"
+            # as picks and rejected with "submission window closed".
+            # Note: text path intentionally accepts any known player (the placer
+            # may ask someone to type "sorted" on their behalf). This is distinct
+            # from the image path (placer-only) and !slip (explicit, any player).
             if _looks_like_bet_placed(body):
                 reply = _handle_placer_bet_confirmation(sender, sender_phone, body)
 
@@ -528,13 +531,18 @@ def _looks_like_bet_placed(text):
 
 def _handle_placer_bet_confirmation(sender, sender_phone, body="", message_id="", from_image=False):
     """
-    When all picks are in, if any known player posts a screenshot or confirmation
-    text, record the bet as placed (placer may delegate to another group member).
+    Record the bet as placed when all picks are in.
 
-    For image messages (from_image=True): the image is validated via LLM before
-    committing — non-bet-slip images (memes, photos) are silently ignored.
-    For text messages (from_image=False): the caller has already validated the
-    keyword, so we commit directly.
+    For image messages (from_image=True): caller has already verified that
+    sender IS the designated placer (see has_media block in webhook). The image
+    is validated via LLM before committing — non-bet-slip images are silently
+    ignored.
+
+    For text messages (from_image=False): accepts any known player — someone
+    can type "placed"/"sorted"/etc on behalf of the placer. The placer credited
+    is always next_placer, not the sender.
+
+    Delegated slips sent by non-placers use !slip (_cmd_slip), not this function.
     """
     from src.parsers.message_parser import extract_test_prefix
 

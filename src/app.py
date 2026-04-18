@@ -207,6 +207,9 @@ def handle_command(parsed):
     if command == "removepick":
         return _cmd_removepick(parsed)
 
+    if command == "slip":
+        return _cmd_slip(parsed)
+
     if command == "cashout":
         return _cmd_cashout(parsed, args)
 
@@ -295,6 +298,59 @@ def _cmd_removepick(parsed):
         return "You have no pick recorded this week."
 
     return butler.pick_removed(player)
+
+
+def _cmd_slip(parsed):
+    """!slip (as a reply to an image) — any known player confirms a delegated bet slip.
+    Unlike auto-detection, the LLM result does not gate the confirmation — a human
+    explicitly tagged the image, so rotation always advances. LLM extraction is
+    best-effort for confirmed_odds only.
+    """
+    from src.services.bet_slip_service import (
+        fetch_image_from_bridge, record_bet_slip, match_legs_to_picks, update_confirmed_odds,
+    )
+
+    quoted_message_id = parsed.get("quoted_message_id", "")
+    if not quoted_message_id:
+        return "Reply to the bet slip image with !slip"
+
+    week = get_current_week(group_id=_get_group_id())
+    if not week:
+        return None
+
+    if week.get("placer_id"):
+        return "Bet slip already confirmed for this week"
+
+    if not all_picks_in(week["id"]):
+        return "Still waiting for all picks before recording the slip"
+
+    sender_player = lookup_player(sender_phone=parsed.get("sender_phone", ""), sender_name=parsed["sender"])
+    if not sender_player:
+        return None
+
+    next_placer = get_next_placer()
+    if not next_placer:
+        return None
+
+    image = fetch_image_from_bridge(quoted_message_id)
+    if not image:
+        return "Couldn't retrieve the image — make sure you're replying directly to the bet slip image"
+
+    extracted = llm_client.read_bet_slip(image["data"], image.get("mimetype", "image/jpeg")) or {}
+
+    advance_rotation(week["id"], next_placer["id"])
+    picks = get_picks_for_week(week["id"])
+    try:
+        record_bet_slip(week["id"], next_placer["id"], extracted)
+        legs = extracted.get("legs") or []
+        if legs and picks:
+            matched = match_legs_to_picks(legs, picks)
+            if matched:
+                update_confirmed_odds(matched)
+    except Exception:
+        logger.exception("Failed to persist bet slip data via !slip (week_id=%d)", week["id"])
+
+    return butler.bet_slip_received(next_placer)
 
 
 def _cmd_cashout(parsed, args):

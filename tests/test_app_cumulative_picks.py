@@ -570,3 +570,179 @@ class TestBetPlacementConfirmation:
         row = conn.execute("SELECT placer_id FROM weeks WHERE id = ?", (week["id"],)).fetchone()
         conn.close()
         assert row["placer_id"] is None
+
+
+class TestSlipCommand:
+    """Tests for !slip — explicit bet slip confirmation via reply to image."""
+
+    GROUP_ID = "test-group@g.us"
+
+    def _setup(self, monkeypatch):
+        from src.app import create_app
+        from src.services.week_service import get_or_create_current_week
+        from src.services.pick_service import submit_pick
+        from src.services.player_service import get_all_players
+
+        _seed_player_emojis()
+        monkeypatch.setattr("src.app.is_within_submission_window", lambda group_id="default": True)
+        monkeypatch.setattr("src.config.Config.GROUP_CHAT_ID", self.GROUP_ID)
+        monkeypatch.setattr("src.config.Config.GROUP_CHAT_IDS", [])
+        monkeypatch.setattr("src.app.send_message", lambda chat_id, text: None)
+
+        app = create_app()
+        client = app.test_client()
+
+        week = get_or_create_current_week(group_id=self.GROUP_ID)
+        players = get_all_players()
+        for p in players:
+            submit_pick(p["id"], week["id"], f"{p['nickname']} pick 2/1", 3.0, "2/1", "win")
+
+        return app, client, week, players
+
+    def test_slip_command_confirms_bet_and_advances_rotation(self, test_db, monkeypatch):
+        """Any known player replying to an image with !slip confirms the bet slip."""
+        app, client, week, players = self._setup(monkeypatch)
+
+        monkeypatch.setattr(
+            "src.services.bet_slip_service.fetch_image_from_bridge",
+            lambda mid: {"data": "fake_b64", "mimetype": "image/jpeg"},
+        )
+        monkeypatch.setattr(
+            "src.app.llm_client.read_bet_slip",
+            lambda data, mime: {
+                "stake": 20.0,
+                "total_odds": 5.0,
+                "potential_return": 100.0,
+                "legs": [],
+            },
+        )
+
+        # Aidan (not the designated placer) uses !slip
+        resp = client.post(
+            "/webhook",
+            json={
+                "sender": "Aidan",
+                "sender_phone": "",
+                "body": "!slip",
+                "group_id": self.GROUP_ID,
+                "has_media": False,
+                "message_id": "",
+                "quoted_message_id": "quoted-img-456",
+            },
+            content_type="application/json",
+        )
+
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["action"] == "replied"
+        assert "Bet slip received" in data["reply"]
+
+        from src.db import get_db
+        conn = get_db()
+        row = conn.execute("SELECT placer_id FROM weeks WHERE id = ?", (week["id"],)).fetchone()
+        slip = conn.execute("SELECT stake FROM bet_slips WHERE week_id = ?", (week["id"],)).fetchone()
+        conn.close()
+        assert row["placer_id"] is not None
+        assert slip is not None
+        assert slip["stake"] == 20.0
+
+    def test_slip_without_quoted_message_returns_error(self, test_db, monkeypatch):
+        """!slip without a quoted message returns a user-visible error."""
+        app, client, week, players = self._setup(monkeypatch)
+
+        resp = client.post(
+            "/webhook",
+            json={
+                "sender": "Aidan",
+                "sender_phone": "",
+                "body": "!slip",
+                "group_id": self.GROUP_ID,
+                "has_media": False,
+                "message_id": "",
+            },
+            content_type="application/json",
+        )
+
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["action"] == "replied"
+        assert "Reply to the bet slip image" in data["reply"]
+
+    def test_slip_when_image_not_in_cache_returns_error(self, test_db, monkeypatch):
+        """!slip where the quoted image can't be fetched returns a user-visible error."""
+        app, client, week, players = self._setup(monkeypatch)
+
+        monkeypatch.setattr(
+            "src.services.bet_slip_service.fetch_image_from_bridge",
+            lambda mid: None,
+        )
+
+        resp = client.post(
+            "/webhook",
+            json={
+                "sender": "Aidan",
+                "sender_phone": "",
+                "body": "!slip",
+                "group_id": self.GROUP_ID,
+                "has_media": False,
+                "message_id": "",
+                "quoted_message_id": "evicted-msg-id",
+            },
+            content_type="application/json",
+        )
+
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["action"] == "replied"
+        assert "couldn't retrieve" in data["reply"].lower()
+
+    def test_slip_when_placer_already_confirmed_returns_error(self, test_db, monkeypatch):
+        """!slip after bet is already confirmed returns a user-visible error."""
+        app, client, week, players = self._setup(monkeypatch)
+
+        from src.db import get_db
+        conn = get_db()
+        conn.execute("UPDATE weeks SET placer_id = ? WHERE id = ?", (players[0]["id"], week["id"]))
+        conn.commit()
+        conn.close()
+
+        resp = client.post(
+            "/webhook",
+            json={
+                "sender": "Aidan",
+                "sender_phone": "",
+                "body": "!slip",
+                "group_id": self.GROUP_ID,
+                "has_media": False,
+                "message_id": "",
+                "quoted_message_id": "any-msg-id",
+            },
+            content_type="application/json",
+        )
+
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["action"] == "replied"
+        assert "already confirmed" in data["reply"].lower()
+
+    def test_slip_unknown_sender_silently_ignored(self, test_db, monkeypatch):
+        """!slip from an unrecognised sender produces no reply."""
+        app, client, week, players = self._setup(monkeypatch)
+
+        resp = client.post(
+            "/webhook",
+            json={
+                "sender": "RandomStranger",
+                "sender_phone": "99999999999@c.us",
+                "body": "!slip",
+                "group_id": self.GROUP_ID,
+                "has_media": False,
+                "message_id": "",
+                "quoted_message_id": "some-msg-id",
+            },
+            content_type="application/json",
+        )
+
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data.get("action") != "replied"

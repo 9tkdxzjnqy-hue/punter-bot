@@ -310,6 +310,9 @@ def week_complete_summary(results, week_number, leaderboard, rotation_next):
         lines.append(f"Lost: {', '.join(loser_names)}")
     lines.append(f"Accumulator: {'Won' if won_count == total else 'Lost'} ({won_count} of {total} won)")
 
+    if len(losers) == 1:
+        lines.append(f"\u26a0\ufe0f Sole loser: {losers[0]['formal_name']} places next week's bet.")
+
     lb_section = _format_leaderboard_section(leaderboard, rotation_next)
     if lb_section:
         lines.extend(["", lb_section])
